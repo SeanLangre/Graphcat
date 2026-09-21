@@ -26,24 +26,37 @@ class LogStreamClient(
 
     private var sendJob: Job? = null
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private var shouldStream = false
 
-    private val logChannel = Channel<LogEvent>(
-        capacity = 500
-    )
+    private val scope =
+        CoroutineScope(Dispatchers.IO)
 
-    private val collector = LogcatCollector(
-        deviceId = "android-01",
-        output = logChannel
-    )
+    private val logChannel =
+        Channel<LogEvent>(capacity = 500)
 
-    fun connect() {
-        Log.d(TAG, "connect() called, url=$serverUrl")
+    private val collector =
+        LogcatCollector(
+            deviceId = "android-01",
+            output = logChannel
+        )
+
+    fun startStreaming() {
+
+        shouldStream = true
 
         if (webSocket != null) {
-            Log.d(TAG, "Already connected/connecting")
             return
         }
+
+        connect()
+    }
+
+    private fun connect() {
+
+        Log.d(
+            TAG,
+            "Connecting to $serverUrl"
+        )
 
         val request = Request.Builder()
             .url(serverUrl)
@@ -57,11 +70,18 @@ class LogStreamClient(
                     webSocket: WebSocket,
                     response: okhttp3.Response
                 ) {
-                    Log.d(TAG, "onOpen")
+
+                    Log.d(TAG, "WebSocket opened")
 
                     onStatusChanged("Connected")
 
                     startSender()
+
+                    if (shouldStream) {
+                        collector.start(scope)
+
+                        onStatusChanged("Streaming")
+                    }
                 }
 
                 override fun onFailure(
@@ -69,15 +89,22 @@ class LogStreamClient(
                     t: Throwable,
                     response: okhttp3.Response?
                 ) {
-                    Log.e(TAG, "onFailure", t)
+
+                    Log.e(
+                        TAG,
+                        "WebSocket failure",
+                        t
+                    )
 
                     this@LogStreamClient.webSocket = null
 
                     stopSender()
 
-                    onStatusChanged(
-                        "Connection failed: ${t.message}"
-                    )
+                    if (shouldStream) {
+                        onStatusChanged(
+                            "Connection failed: ${t.message}"
+                        )
+                    }
                 }
 
                 override fun onClosing(
@@ -85,9 +112,10 @@ class LogStreamClient(
                     code: Int,
                     reason: String
                 ) {
+
                     Log.d(
                         TAG,
-                        "onClosing code=$code reason=$reason"
+                        "WebSocket closing: $code $reason"
                     )
 
                     onStatusChanged("Closing")
@@ -98,38 +126,26 @@ class LogStreamClient(
                     code: Int,
                     reason: String
                 ) {
+
                     Log.d(
                         TAG,
-                        "onClosed code=$code reason=$reason"
+                        "WebSocket closed: $code $reason"
                     )
 
                     this@LogStreamClient.webSocket = null
 
                     stopSender()
 
-                    onStatusChanged("Disconnected")
+                    if (shouldStream) {
+                        onStatusChanged("Disconnected")
+                    }
                 }
             }
         )
     }
 
-    fun startLogcat() {
-        Log.d(TAG, "Starting Logcat collector")
-
-        collector.start(scope)
-
-        onStatusChanged("Streaming")
-    }
-
-    fun stopLogcat() {
-        Log.d(TAG, "Stopping Logcat collector")
-
-        collector.stop()
-
-        onStatusChanged("Connected")
-    }
-
     private fun startSender() {
+
         if (sendJob?.isActive == true) {
             return
         }
@@ -147,28 +163,63 @@ class LogStreamClient(
                 if (socket == null) {
                     Log.w(
                         TAG,
-                        "No WebSocket connection; dropping log"
+                        "No WebSocket; dropping seq=${event.seq}"
                     )
+
                     continue
                 }
 
                 val json = JSONObject().apply {
-                    put("device_id", event.deviceId)
-                    put("seq", event.seq)
-                    put("timestamp", event.timestamp)
-                    put("priority", event.priority)
-                    put("tag", event.tag)
-                    put("pid", event.pid)
-                    put("uid", event.uid)
-                    put("message", event.message)
+
+                    put(
+                        "device_id",
+                        event.deviceId
+                    )
+
+                    put(
+                        "seq",
+                        event.seq
+                    )
+
+                    put(
+                        "timestamp",
+                        event.timestamp
+                    )
+
+                    put(
+                        "priority",
+                        event.priority
+                    )
+
+                    put(
+                        "tag",
+                        event.tag
+                    )
+
+                    put(
+                        "pid",
+                        event.pid
+                    )
+
+                    put(
+                        "uid",
+                        event.uid
+                    )
+
+                    put(
+                        "message",
+                        event.message
+                    )
                 }
 
-                val sent = socket.send(json.toString())
+                val sent =
+                    socket.send(json.toString())
 
                 if (!sent) {
+
                     Log.w(
                         TAG,
-                        "WebSocket rejected log event seq=${event.seq}"
+                        "WebSocket rejected seq=${event.seq}"
                     )
                 }
             }
@@ -176,18 +227,22 @@ class LogStreamClient(
     }
 
     private fun stopSender() {
+
         sendJob?.cancel()
         sendJob = null
     }
 
     fun disconnect() {
-        stopLogcat()
+
+        shouldStream = false
+
+        collector.stop()
 
         stopSender()
 
         webSocket?.close(
             1000,
-            "User disconnected"
+            "User stopped LogStream"
         )
 
         webSocket = null
