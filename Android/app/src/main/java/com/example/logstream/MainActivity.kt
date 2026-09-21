@@ -72,7 +72,10 @@ fun LogStreamScreen() {
 
         Button(
             onClick = {
-                if (status == "Connected") {
+                if (
+                    status == "Connected" ||
+                    status == "Streaming"
+                ) {
                     client.disconnect()
                 } else {
                     client.connect()
@@ -80,7 +83,10 @@ fun LogStreamScreen() {
             }
         ) {
             Text(
-                if (status == "Connected") {
+                if (
+                    status == "Connected" ||
+                    status == "Streaming"
+                ) {
                     "Disconnect"
                 } else {
                     "Connect"
@@ -92,11 +98,22 @@ fun LogStreamScreen() {
 
         Button(
             onClick = {
-                client.sendTestLog()
+                if (status == "Streaming") {
+                    client.stopLogcat()
+                } else {
+                    client.startLogcat()
+                }
             },
-            enabled = status == "Connected"
+            enabled = status == "Connected" ||
+                    status == "Streaming"
         ) {
-            Text("Send Test Log")
+            Text(
+                if (status == "Streaming") {
+                    "Stop Logcat"
+                } else {
+                    "Start Logcat"
+                }
+            )
         }
     }
 }
