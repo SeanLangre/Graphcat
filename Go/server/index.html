@@ -1,38 +1,137 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Log Stream</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LogStream</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: #ddd;
+            font-family: monospace;
+        }
+
+        header {
+            padding: 16px 20px;
+            background: #1b1b1b;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #status {
+            color: #aaa;
+        }
+
+        #logs {
+            margin: 0;
+            padding: 16px 20px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .log {
+            margin-bottom: 4px;
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .warn {
+            color: #ffd166;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Live Logs</h1>
-    <pre id="logs"></pre>
 
-    <script>
-        const logs = document.getElementById("logs");
+<header>
+    <strong>LogStream</strong>
+    <span id="status">Connecting...</span>
+</header>
 
-        const ws = new WebSocket(
-            `ws://${location.host}/v1/dashboard/stream`
-        );
+<pre id="logs"></pre>
 
-        ws.onopen = () => {
-            logs.textContent += "Connected to server\n\n";
-        };
+<script>
+    const logs = document.getElementById("logs");
+    const status = document.getElementById("status");
 
-        ws.onmessage = (event) => {
+    const ws = new WebSocket(
+        `ws://${location.host}/v1/dashboard/stream`
+    );
+
+    ws.onopen = () => {
+        status.textContent = "Connected";
+        status.style.color = "#6ee7b7";
+
+        appendSystemMessage("Connected to server");
+    };
+
+    ws.onmessage = (event) => {
+        try {
             const log = JSON.parse(event.data);
 
-            logs.textContent +=
-                `[${log.priority}] ${log.device_id} ${log.tag}: ${log.message}\n`;
-        };
+            const time = new Date(log.timestamp)
+                .toLocaleTimeString();
 
-        ws.onclose = () => {
-            logs.textContent += "\nDisconnected\n";
-        };
+            const line =
+                `${time} ` +
+                `[${log.priority}] ` +
+                `${log.device_id} ` +
+                `${log.tag}: ` +
+                `${log.message}`;
 
-        ws.onerror = (error) => {
-            console.error(error);
-        };
-    </script>
+            appendLog(line, log.priority);
+
+        } catch (error) {
+            console.error("Invalid log event:", error);
+        }
+    };
+
+    ws.onclose = () => {
+        status.textContent = "Disconnected";
+        status.style.color = "#ff6b6b";
+
+        appendSystemMessage("Disconnected from server");
+    };
+
+    ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+    };
+
+    function appendLog(text, priority) {
+        const line = document.createElement("div");
+
+        line.className = "log";
+
+        if (priority === "E" || priority === "F") {
+            line.classList.add("error");
+        } else if (priority === "W") {
+            line.classList.add("warn");
+        }
+
+        line.textContent = text;
+
+        logs.appendChild(line);
+
+        window.scrollTo(
+            0,
+            document.body.scrollHeight
+        );
+    }
+
+    function appendSystemMessage(text) {
+        const line = document.createElement("div");
+
+        line.style.color = "#888";
+        line.textContent = `--- ${text} ---`;
+
+        logs.appendChild(line);
+    }
+</script>
+
 </body>
 </html>
