@@ -1,0 +1,3 @@
+# Copy this file to local.properties (already gitignored) and fill in your values.
+sdk.dir=/path/to/Android/Sdk
+SERVER_URL=ws://192.168.1.100:8080/v1/device/stream

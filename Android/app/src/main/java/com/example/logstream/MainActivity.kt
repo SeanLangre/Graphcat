@@ -17,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.logstream.BuildConfig
 import com.example.logstream.ui.theme.LogStreamTheme
 
 class MainActivity : ComponentActivity() {
@@ -37,7 +38,18 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LogStreamScreen() {
 
-    var connected by remember { mutableStateOf(false) }
+    var status by remember {
+        mutableStateOf("Disconnected")
+    }
+
+    val client = remember {
+        LogStreamClient(
+            serverUrl = BuildConfig.SERVER_URL,
+            onStatusChanged = { newStatus ->
+                status = newStatus
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -54,23 +66,21 @@ fun LogStreamScreen() {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Text(
-            text = if (connected) {
-                "Status: Connected"
-            } else {
-                "Status: Disconnected"
-            }
-        )
+        Text("Status: $status")
 
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
-                connected = !connected
+                if (status == "Connected") {
+                    client.disconnect()
+                } else {
+                    client.connect()
+                }
             }
         ) {
             Text(
-                text = if (connected) {
+                if (status == "Connected") {
                     "Disconnect"
                 } else {
                     "Connect"
@@ -82,9 +92,9 @@ fun LogStreamScreen() {
 
         Button(
             onClick = {
-                // We will send a test log here later.
+                client.sendTestLog()
             },
-            enabled = connected
+            enabled = status == "Connected"
         ) {
             Text("Send Test Log")
         }

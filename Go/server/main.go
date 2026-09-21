@@ -71,6 +71,7 @@ func (h *Hub) broadcast(event LogEvent) {
 }
 
 func (h *Hub) deviceHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("device request received: %s %s", r.Method, r.URL.Path)
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		log.Printf("device websocket: %v", err)
@@ -129,25 +130,25 @@ func (h *Hub) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    hub := NewHub()
+	hub := NewHub()
 
-    http.HandleFunc("/v1/device/stream", hub.deviceHandler)
-    http.HandleFunc("/v1/dashboard/stream", hub.dashboardHandler)
+	http.HandleFunc("/v1/device/stream", hub.deviceHandler)
+	http.HandleFunc("/v1/dashboard/stream", hub.dashboardHandler)
 
-    http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-        w.WriteHeader(http.StatusOK)
-        w.Write([]byte("ok\n"))
-    })
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok\n"))
+	})
 
-    http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-        http.ServeFile(w, r, "index.html")
-    })
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "index.html")
+	})
 
-    addr := ":8080"
+	addr := ":8080"
 
-    log.Printf("server listening on %s", addr)
+	log.Printf("server listening on %s", addr)
 
-    if err := http.ListenAndServe(addr, nil); err != nil {
-        log.Fatal(err)
-    }
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatal(err)
+	}
 }
