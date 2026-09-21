@@ -66,3 +66,66 @@ Now open LogStream and press **Start Streaming**.
 - Go 1.27+
 - Android SDK 35, minSdk 26
 - A device and server on the same network (the app uses `usesCleartextTraffic` for plain `ws://`)
+
+## Planned architecture
+
+The current server fans events straight to connected dashboards. The planned direction adds Loki as a persistent, searchable log store and Grafana as an operator UI on top of it, while keeping the existing live browser dashboard for immediate monitoring:
+
+```
+                         ┌─────────────────────────────┐
+                         │       Android Device        │
+                         │                             │
+                         │  LogStream App              │
+                         │      │                      │
+                         │      ▼                      │
+                         │  Foreground Service         │
+                         │  (specialUse)               │
+                         │      │                      │
+                         │      ▼                      │
+                         │  Android Logcat             │
+                         │  READ_LOGS granted via ADB  │
+                         │      │                      │
+                         │      ▼                      │
+                         │  LogStreamClient             │
+                         └──────┬──────────────────────┘
+                                │
+                                │ WebSocket
+                                │ /v1/device/stream
+                                ▼
+                    ┌──────────────────────────┐
+                    │        Go Server         │
+                    │                          │
+                    │  Device WebSocket        │
+                    │          │               │
+                    │          ▼               │
+                    │     LogEvent             │
+                    │          │               │
+                    │     ┌────┴─────┐         │
+                    │     │          │         │
+                    │     ▼          ▼         │
+                    │   Loki      Dashboard    │
+                    │     │      WebSocket     │
+                    │     │          │         │
+                    └─────┼──────────┼─────────┘
+                          │          │
+                          ▼          ▼
+                    ┌─────────┐   Browser
+                    │  Loki   │   Dashboard
+                    │  :3100  │
+                    └────┬────┘
+                         │
+                         ▼
+                   ┌───────────┐
+                   │  Grafana  │
+                   │   :3000   │
+                   └───────────┘
+```
+
+- **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v threadtime` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Parsed lines become structured `LogEvent` JSON and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
+- **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's persisted to Loki for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. The live dashboard doesn't depend on Loki/Grafana being up.
+- **Loki** — the log storage/search backend (planned to run locally via Docker, `:3100`). Fields like `device_id`, `priority`, and `tag` become labels (e.g. `{device_id="android-01", priority="E"}`), with the message stored as log content.
+- **Grafana** — the operator/search UI (planned, `:3000`), for historical queries, time-range filtering, log tailing, and dashboards across one or many devices.
+- **Two views**: a live view (`Go → Browser`) for immediate monitoring, and a historical/search view (`Go → Loki → Grafana`) for investigation.
+- **Multiple devices** — the architecture already supports this: additional Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.
+
+See [TODO.md](TODO.md) for the remaining work to get there.
