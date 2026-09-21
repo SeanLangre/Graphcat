@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Log Stream</title>
+</head>
+<body>
+    <h1>Live Logs</h1>
+    <pre id="logs"></pre>
+
+    <script>
+        const logs = document.getElementById("logs");
+
+        const ws = new WebSocket(
+            `ws://${location.host}/v1/dashboard/stream`
+        );
+
+        ws.onopen = () => {
+            logs.textContent += "Connected to server\n\n";
+        };
+
+        ws.onmessage = (event) => {
+            const log = JSON.parse(event.data);
+
+            logs.textContent +=
+                `[${log.priority}] ${log.device_id} ${log.tag}: ${log.message}\n`;
+        };
+
+        ws.onclose = () => {
+            logs.textContent += "\nDisconnected\n";
+        };
+
+        ws.onerror = (error) => {
+            console.error(error);
+        };
+    </script>
+</body>
+</html>
