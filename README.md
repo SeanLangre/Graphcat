@@ -40,7 +40,7 @@ This connects to `ws://localhost:8080/v1/device/stream` and streams synthetic lo
 
 ## Running Loki
 
-The server pushes every received `LogEvent` to Loki (hardcoded at `http://localhost:3100` in `Go/server/loki.go`); a push failure is logged but doesn't block the live dashboard broadcast.
+The server pushes every received `LogEvent` to Loki, at the URL from the `LOKI_URL` env var (defaults to `http://localhost:3100` if unset); a push failure is logged but doesn't block the live dashboard broadcast.
 
 ```
 cd infrastructure/loki
@@ -144,7 +144,7 @@ The server now fans each event both to connected dashboards and to Loki as a per
 ```
 
 - **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v threadtime` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Parsed lines become structured `LogEvent` JSON and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
-- **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard doesn't depend on Loki/Grafana being up.
+- **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard doesn't depend on Loki/Grafana being up.
 - **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Currently `device_id`, `priority`, and `tag` become labels (e.g. `{device_id="android-01", priority="E"}`), with the message stored as log content.
 - **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), for historical queries, time-range filtering, log tailing, and dashboards across one or many devices. The Loki data source and dashboards still need to be configured — see [TODO.md](TODO.md).
 - **Two views**: a live view (`Go → Browser`) for immediate monitoring, and a historical/search view (`Go → Loki → Grafana`) for investigation.

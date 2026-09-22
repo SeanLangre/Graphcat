@@ -10,17 +10,17 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Run Loki locally (Docker Compose in `infrastructure/loki/`)
 - [x] Go server → Loki ingestion (`LokiClient.Push` in `Go/server/loki.go`, pushed alongside the existing dashboard broadcast in `deviceHandler`)
 - [x] Run Grafana locally (`infrastructure/grafana/docker-compose.yml`, `:3000`)
+- [x] Make the Loki URL in `Go/server/main.go` configurable via `LOKI_URL` env var (defaults to `http://localhost:3100`)
+- [x] Grafana → Loki data source (provisioning or manual), basic dashboards/queries
+- [x] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
 
 ## Next up
 
-1. [ ] Grafana → Loki data source (provisioning or manual), basic dashboards/queries
-2. [ ] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
-3. [ ] Make the Loki URL in `Go/server/main.go` (`NewLokiClient("http://localhost:3100")`) configurable instead of hardcoded
-4. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
-5. [ ] Go server buffering/backpressure for bursty log volume
-6. [ ] Authentication (device stream + dashboard/Grafana access)
-7. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
-8. [ ] Production deployment
+3. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
+4. [ ] Go server buffering/backpressure for bursty log volume
+5. [ ] Authentication (device stream + dashboard/Grafana access)
+6. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
+7. [ ] Production deployment
 
 ## Notes
 

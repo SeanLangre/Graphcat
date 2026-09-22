@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -138,7 +139,15 @@ func (h *Hub) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	loki := NewLokiClient("http://localhost:3100")
+	lokiURL := os.Getenv("LOKI_URL")
+
+	if lokiURL == "" {
+		lokiURL = "http://localhost:3100"
+	}
+
+	log.Printf("using Loki at %s", lokiURL)
+
+	loki := NewLokiClient(lokiURL)
 
 	hub := NewHub()
 
