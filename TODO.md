@@ -9,18 +9,18 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] System-wide Logcat access via `adb shell pm grant com.example.logstream android.permission.READ_LOGS`
 - [x] Run Loki locally (Docker Compose in `infrastructure/loki/`)
 - [x] Go server → Loki ingestion (`LokiClient.Push` in `Go/server/loki.go`, pushed alongside the existing dashboard broadcast in `deviceHandler`)
+- [x] Run Grafana locally (`infrastructure/grafana/docker-compose.yml`, `:3000`)
 
 ## Next up
 
-1. [ ] Add Grafana to `infrastructure/loki/docker-compose.yml` alongside Loki
-2. [ ] Grafana → Loki data source, basic dashboards/queries
-3. [ ] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
-4. [ ] Make the Loki URL in `Go/server/main.go` (`NewLokiClient("http://localhost:3100")`) configurable instead of hardcoded
-5. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
-6. [ ] Go server buffering/backpressure for bursty log volume
-7. [ ] Authentication (device stream + dashboard/Grafana access)
-8. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
-9. [ ] Production deployment
+1. [ ] Grafana → Loki data source (provisioning or manual), basic dashboards/queries
+2. [ ] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
+3. [ ] Make the Loki URL in `Go/server/main.go` (`NewLokiClient("http://localhost:3100")`) configurable instead of hardcoded
+4. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
+5. [ ] Go server buffering/backpressure for bursty log volume
+6. [ ] Authentication (device stream + dashboard/Grafana access)
+7. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
+8. [ ] Production deployment
 
 ## Notes
 
