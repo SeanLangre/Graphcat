@@ -7,19 +7,20 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Android Logcat → `LogcatCollector` → WebSocket → Go server → browser dashboard (live path working end-to-end)
 - [x] `LogStreamService` as a foreground `specialUse` service — streaming continues after leaving the Activity
 - [x] System-wide Logcat access via `adb shell pm grant com.example.logstream android.permission.READ_LOGS`
+- [x] Run Loki locally (Docker Compose in `infrastructure/loki/`)
+- [x] Go server → Loki ingestion (`LokiClient.Push` in `Go/server/loki.go`, pushed alongside the existing dashboard broadcast in `deviceHandler`)
 
 ## Next up
 
-1. [ ] Run Loki locally (Docker)
-2. [ ] Go server → Loki ingestion (push each `LogEvent` alongside the existing dashboard broadcast)
-3. [ ] Docker Compose to bring up Loki (+ Grafana) together
-4. [ ] Grafana → Loki data source, basic dashboards/queries
-5. [ ] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
-6. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
-7. [ ] Go server buffering/backpressure for bursty log volume
-8. [ ] Authentication (device stream + dashboard/Grafana access)
-9. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
-10. [ ] Production deployment
+1. [ ] Add Grafana to `infrastructure/loki/docker-compose.yml` alongside Loki
+2. [ ] Grafana → Loki data source, basic dashboards/queries
+3. [ ] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
+4. [ ] Make the Loki URL in `Go/server/main.go` (`NewLokiClient("http://localhost:3100")`) configurable instead of hardcoded
+5. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)
+6. [ ] Go server buffering/backpressure for bursty log volume
+7. [ ] Authentication (device stream + dashboard/Grafana access)
+8. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
+9. [ ] Production deployment
 
 ## Notes
 

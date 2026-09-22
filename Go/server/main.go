@@ -70,7 +70,11 @@ func (h *Hub) broadcast(event LogEvent) {
 	}
 }
 
-func (h *Hub) deviceHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Hub) deviceHandler(
+	w http.ResponseWriter,
+	r *http.Request,
+	loki *LokiClient,
+) {
 	log.Printf("device request received: %s %s", r.Method, r.URL.Path)
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
@@ -93,6 +97,10 @@ func (h *Hub) deviceHandler(w http.ResponseWriter, r *http.Request) {
 		if err := json.Unmarshal(data, &event); err != nil {
 			log.Printf("invalid log event: %v", err)
 			continue
+		}
+
+		if err := loki.Push(event); err != nil {
+			log.Printf("failed to push to Loki: %v", err)
 		}
 
 		log.Printf(
@@ -130,9 +138,14 @@ func (h *Hub) dashboardHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	loki := NewLokiClient("http://localhost:3100")
+
 	hub := NewHub()
 
-	http.HandleFunc("/v1/device/stream", hub.deviceHandler)
+	http.HandleFunc("/v1/device/stream", func(w http.ResponseWriter, r *http.Request) {
+		hub.deviceHandler(w, r, loki)
+	})
+
 	http.HandleFunc("/v1/dashboard/stream", hub.dashboardHandler)
 
 	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

@@ -1,0 +1,11 @@
+services:
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: logstream-loki
+    command: -config.file=/etc/loki/loki-config.yaml
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - ./data:/loki
+    restart: unless-stopped
