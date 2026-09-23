@@ -9,3 +9,6 @@ services:
       - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
       - ./data:/loki
     restart: unless-stopped
+networks:
+  default:
+    name: logstream

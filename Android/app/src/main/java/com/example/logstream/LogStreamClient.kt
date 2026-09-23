@@ -17,6 +17,7 @@ private const val TAG = "LogStreamClient"
 
 class LogStreamClient(
     private val serverUrl: String,
+    private val appResolver: AppResolver,
     private val onStatusChanged: (String) -> Unit
 ) {
 
@@ -37,7 +38,8 @@ class LogStreamClient(
     private val collector =
         LogcatCollector(
             deviceId = "android-01",
-            output = logChannel
+            output = logChannel,
+            appResolver = appResolver
         )
 
     fun startStreaming() {
@@ -204,6 +206,11 @@ class LogStreamClient(
                     put(
                         "uid",
                         event.uid
+                    )
+
+                    put(
+                        "package",
+                        event.packageName
                     )
 
                     put(

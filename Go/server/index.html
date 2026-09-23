@@ -81,6 +81,7 @@
                 `${time} ` +
                 `[${log.priority}] ` +
                 `${log.device_id} ` +
+                (log.package ? `(${log.package}) ` : "") +
                 `${log.tag}: ` +
                 `${log.message}`;
 

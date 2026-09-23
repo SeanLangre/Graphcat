@@ -8,5 +8,6 @@ data class LogEvent(
     val tag: String,
     val pid: Int,
     val uid: Int,
+    val packageName: String,
     val message: String
 )

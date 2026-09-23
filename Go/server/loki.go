@@ -32,7 +32,39 @@ type lokiStream struct {
 	Values [][2]string       `json:"values"`
 }
 
+// lokiLevels maps Android log priorities to the level names Loki and
+// Grafana recognise, so lines aren't shown as "unknown".
+var lokiLevels = map[string]string{
+	"V": "trace",
+	"D": "debug",
+	"I": "info",
+	"W": "warn",
+	"E": "error",
+	"F": "critical",
+}
+
 func (l *LokiClient) Push(event LogEvent) error {
+	app := event.Package
+	if app == "" {
+		app = "unknown"
+	}
+
+	level, ok := lokiLevels[event.Priority]
+	if !ok {
+		level = "unknown"
+	}
+
+	// Mirror `adb logcat` so the source is visible in the line itself,
+	// not only in the stream labels.
+	line := fmt.Sprintf(
+		"[%s] %s/%s(%d): %s",
+		app,
+		event.Priority,
+		event.Tag,
+		event.PID,
+		event.Message,
+	)
+
 	payload := lokiPushRequest{
 		Streams: []lokiStream{
 			{
@@ -40,7 +72,9 @@ func (l *LokiClient) Push(event LogEvent) error {
 					"job":       "logstream",
 					"device_id": event.DeviceID,
 					"priority":  event.Priority,
+					"level":     level,
 					"tag":       event.Tag,
+					"app":       app,
 				},
 				Values: [][2]string{
 					{
@@ -48,7 +82,7 @@ func (l *LokiClient) Push(event LogEvent) error {
 							event.Timestamp*int64(time.Millisecond),
 							10,
 						),
-						event.Message,
+						line,
 					},
 				},
 			},

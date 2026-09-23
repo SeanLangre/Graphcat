@@ -34,6 +34,7 @@ class LogStreamService : Service() {
 
         client = LogStreamClient(
             serverUrl = BuildConfig.SERVER_URL,
+            appResolver = AppResolver(packageManager),
             onStatusChanged = { status ->
                 Log.d(TAG, "Status: $status")
 

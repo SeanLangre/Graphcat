@@ -12,7 +12,8 @@ private const val TAG = "LogcatCollector"
 
 class LogcatCollector(
     private val deviceId: String,
-    private val output: Channel<LogEvent>
+    private val output: Channel<LogEvent>,
+    private val appResolver: AppResolver
 ) {
     private var job: Job? = null
 
@@ -26,7 +27,9 @@ class LogcatCollector(
                 process = ProcessBuilder(
                     "logcat",
                     "-v",
-                    "threadtime"
+                    "threadtime",
+                    "-v",
+                    "uid"
                 )
                     .redirectErrorStream(true)
                     .start()
@@ -65,32 +68,56 @@ class LogcatCollector(
         line: String,
         seq: Long
     ): LogEvent? {
-        /*
-         * Example threadtime line:
-         *
-         * 09-21 15:42:10.123  1234  1234 I MyTag: Hello
-         *
-         * We intentionally keep this parser conservative for now.
-         */
+        val parsed = parseThreadtimeLine(line) ?: return null
 
-        val match = Regex(
-            """^\d\d-\d\d\s+\d\d:\d\d:\d\d\.\d+\s+(\d+)\s+(\d+)\s+([VDIWEFS])\s+([^:]+):\s?(.*)$"""
-        ).matchEntire(line) ?: return null
-
-        val pid = match.groupValues[1].toIntOrNull() ?: return null
-        val priority = match.groupValues[3]
-        val tag = match.groupValues[4].trim()
-        val message = match.groupValues[5]
+        val uid = parsed.uidToken
+            ?.let { appResolver.resolveUid(it) }
+            ?: -1
 
         return LogEvent(
             deviceId = deviceId,
             seq = seq,
             timestamp = System.currentTimeMillis(),
-            priority = priority,
-            tag = tag,
-            pid = pid,
-            uid = -1,
-            message = message
+            priority = parsed.priority,
+            tag = parsed.tag,
+            pid = parsed.pid,
+            uid = uid,
+            packageName = parsed.uidToken
+                ?.let { appResolver.appName(uid, it) }
+                ?: "",
+            message = parsed.message
         )
     }
+}
+
+internal data class ParsedLine(
+    val uidToken: String?,
+    val pid: Int,
+    val priority: String,
+    val tag: String,
+    val message: String
+)
+
+/*
+ * Example `logcat -v threadtime -v uid` line:
+ *
+ * 09-21 15:42:10.123 u0_a123  1234  1234 I Unity: Hello
+ *
+ * The uid column is optional so plain threadtime lines still parse.
+ * The uid is printed as a passwd name ("u0_a123", "system") or a number.
+ */
+private val THREADTIME_REGEX = Regex(
+    """^\d\d-\d\d\s+\d\d:\d\d:\d\d\.\d+\s+(?:([A-Za-z_][\w.]*|\d+)\s+(?=\d+\s+\d+\s))?(\d+)\s+(\d+)\s+([VDIWEFS])\s+([^:]*?)\s*:\s?(.*)$"""
+)
+
+internal fun parseThreadtimeLine(line: String): ParsedLine? {
+    val match = THREADTIME_REGEX.matchEntire(line) ?: return null
+
+    return ParsedLine(
+        uidToken = match.groupValues[1].ifEmpty { null },
+        pid = match.groupValues[2].toIntOrNull() ?: return null,
+        priority = match.groupValues[4],
+        tag = match.groupValues[5].trim(),
+        message = match.groupValues[6]
+    )
 }
