@@ -27,7 +27,9 @@ class LogcatCollector(
                 process = ProcessBuilder(
                     "logcat",
                     "-v",
-                    "threadtime",
+                    "long",
+                    "-v",
+                    "epoch",
                     "-v",
                     "uid"
                 )
@@ -36,18 +38,21 @@ class LogcatCollector(
 
                 process.inputStream.bufferedReader().use { reader ->
 
+                    val parser = LongFormatParser()
                     var seq = 0L
 
                     while (isActive) {
                         val line = reader.readLine() ?: break
 
-                        val event = parseLine(
+                        val entry = parser.feed(
                             line = line,
-                            seq = ++seq
+                            moreBuffered = reader.ready()
                         ) ?: continue
 
-                        output.send(event)
+                        output.send(toEvent(entry, ++seq))
                     }
+
+                    parser.flush()?.let { output.send(toEvent(it, ++seq)) }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Logcat reader failed", e)
@@ -64,60 +69,147 @@ class LogcatCollector(
         job = null
     }
 
-    private fun parseLine(
-        line: String,
+    private fun toEvent(
+        entry: LogEntry,
         seq: Long
-    ): LogEvent? {
-        val parsed = parseThreadtimeLine(line) ?: return null
-
-        val uid = parsed.uidToken
+    ): LogEvent {
+        val uid = entry.uidToken
             ?.let { appResolver.resolveUid(it) }
             ?: -1
 
         return LogEvent(
             deviceId = deviceId,
             seq = seq,
-            timestamp = System.currentTimeMillis(),
-            priority = parsed.priority,
-            tag = parsed.tag,
-            pid = parsed.pid,
+            timestamp = entry.timestampMs,
+            priority = entry.priority,
+            tag = entry.tag,
+            pid = entry.pid,
+            tid = entry.tid,
             uid = uid,
-            packageName = parsed.uidToken
+            packageName = entry.uidToken
                 ?.let { appResolver.appName(uid, it) }
                 ?: "",
-            message = parsed.message
+            message = entry.message
         )
     }
 }
 
-internal data class ParsedLine(
+internal data class LogEntry(
+    val timestampMs: Long,
     val uidToken: String?,
     val pid: Int,
+    val tid: Int,
     val priority: String,
     val tag: String,
     val message: String
 )
 
 /*
- * Example `logcat -v threadtime -v uid` line:
+ * Example `logcat -v long -v epoch -v uid` entry:
  *
- * 09-21 15:42:10.123 u0_a123  1234  1234 I Unity: Hello
+ * [ 1790602726.972 u0_a940 27446:27751 V/LevelPlaySDK: INTERNAL ]
+ * UIThread: false Activity: 185699668 af r - configurations(
+ * RewardedVideoConfigurations{parallelLoad=2, bidderExclusive=true}
+ * null)
+ * <blank line>
  *
- * The uid column is optional so plain threadtime lines still parse.
- * The uid is printed as a passwd name ("u0_a123", "system") or a number.
+ * The header brackets the tag, so tags containing ':' or spaces survive,
+ * and every line up to the next header belongs to the same entry.
+ * The uid is printed as a passwd name ("u0_a123", "system") or a number,
+ * and may be followed by ':' instead of a space.
  */
-private val THREADTIME_REGEX = Regex(
-    """^\d\d-\d\d\s+\d\d:\d\d:\d\d\.\d+\s+(?:([A-Za-z_][\w.]*|\d+)\s+(?=\d+\s+\d+\s))?(\d+)\s+(\d+)\s+([VDIWEFS])\s+([^:]*?)\s*:\s?(.*)$"""
+private val LONG_HEADER_REGEX = Regex(
+    """^\[\s+(\d+)\.(\d+)\s+(?:([A-Za-z_][\w.]*|\d+)[\s:]\s*)?(\d+):\s*(\d+)\s+([VDIWEFSA])/(.*?)\s*]$"""
 )
 
-internal fun parseThreadtimeLine(line: String): ParsedLine? {
-    val match = THREADTIME_REGEX.matchEntire(line) ?: return null
+// "--------- beginning of main", "--------- switch to crash", ...
+private val BUFFER_SEPARATOR_REGEX = Regex("""^-{9} (beginning of|switch to) \S+$""")
 
-    return ParsedLine(
-        uidToken = match.groupValues[1].ifEmpty { null },
-        pid = match.groupValues[2].toIntOrNull() ?: return null,
-        priority = match.groupValues[4],
-        tag = match.groupValues[5].trim(),
-        message = match.groupValues[6]
+private data class EntryHeader(
+    val timestampMs: Long,
+    val uidToken: String?,
+    val pid: Int,
+    val tid: Int,
+    val priority: String,
+    val tag: String
+)
+
+private fun parseLongHeader(line: String): EntryHeader? {
+    val match = LONG_HEADER_REGEX.matchEntire(line) ?: return null
+    val g = match.groupValues
+
+    val seconds = g[1].toLongOrNull() ?: return null
+    val millis = g[2].padEnd(3, '0').take(3).toLong()
+
+    return EntryHeader(
+        timestampMs = seconds * 1000 + millis,
+        uidToken = g[3].ifEmpty { null },
+        pid = g[4].toIntOrNull() ?: return null,
+        tid = g[5].toIntOrNull() ?: return null,
+        priority = g[6],
+        tag = g[7].trim()
     )
+}
+
+/**
+ * Groups `logcat -v long` output into whole entries.
+ *
+ * An entry ends at the next header. Because the next header can be a long
+ * time coming, an entry also ends at a blank line when [feed] is told no
+ * more input is buffered: logcat writes each entry, including its trailing
+ * blank line, in one go. Blank lines inside a message (Unity stack traces
+ * have them) are kept as long as more of the entry is already buffered.
+ * Lines that arrive after an entry was closed early are sent as a new entry
+ * with the same header rather than dropped.
+ */
+internal class LongFormatParser {
+    private var header: EntryHeader? = null
+    private val lines = mutableListOf<String>()
+    private var open = false
+
+    fun feed(line: String, moreBuffered: Boolean): LogEntry? {
+        parseLongHeader(line)?.let { next ->
+            val done = flush()
+            header = next
+            open = true
+            return done
+        }
+
+        if (BUFFER_SEPARATOR_REGEX.matches(line)) {
+            return flush()
+        }
+
+        if (!open) {
+            if (line.isEmpty() || header == null) return null
+            open = true
+        }
+
+        lines += line
+
+        return if (line.isEmpty() && !moreBuffered) flush() else null
+    }
+
+    fun flush(): LogEntry? {
+        val h = header ?: return null
+        if (!open) return null
+
+        open = false
+
+        while (lines.lastOrNull()?.isEmpty() == true) {
+            lines.removeAt(lines.lastIndex)
+        }
+
+        val message = lines.joinToString("\n")
+        lines.clear()
+
+        return LogEntry(
+            timestampMs = h.timestampMs,
+            uidToken = h.uidToken,
+            pid = h.pid,
+            tid = h.tid,
+            priority = h.priority,
+            tag = h.tag,
+            message = message
+        )
+    }
 }

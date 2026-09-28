@@ -57,11 +57,12 @@ func (l *LokiClient) Push(event LogEvent) error {
 	// Mirror `adb logcat` so the source is visible in the line itself,
 	// not only in the stream labels.
 	line := fmt.Sprintf(
-		"[%s] %s/%s(%d): %s",
+		"[%s] %s/%s(%d-%d): %s",
 		app,
 		event.Priority,
 		event.Tag,
 		event.PID,
+		event.TID,
 		event.Message,
 	)
 

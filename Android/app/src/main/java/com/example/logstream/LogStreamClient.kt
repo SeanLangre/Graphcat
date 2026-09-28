@@ -204,6 +204,11 @@ class LogStreamClient(
                     )
 
                     put(
+                        "tid",
+                        event.tid
+                    )
+
+                    put(
                         "uid",
                         event.uid
                     )

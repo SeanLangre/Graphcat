@@ -16,6 +16,7 @@ type LogEvent struct {
 	Priority  string `json:"priority"`
 	Tag       string `json:"tag"`
 	PID       int    `json:"pid"`
+	TID       int    `json:"tid"`
 	UID       int    `json:"uid"`
 	Package   string `json:"package"`
 	Message   string `json:"message"`
@@ -42,6 +43,7 @@ func main() {
 			Priority:  "E",
 			Tag:       "TestApp",
 			PID:       1234,
+			TID:       1250,
 			UID:       10123,
 			Package:   "com.example.testapp",
 			Message:   "Hello from the test phone",

@@ -19,6 +19,7 @@ type LogEvent struct {
 	Priority  string `json:"priority"`
 	Tag       string `json:"tag"`
 	PID       int    `json:"pid"`
+	TID       int    `json:"tid"`
 	UID       int    `json:"uid"`
 	Package   string `json:"package"`
 	Message   string `json:"message"`
