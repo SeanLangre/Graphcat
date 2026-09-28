@@ -54,4 +54,19 @@ class LogcatParserTest {
         assertEquals(1000, uidFromLogcatToken("1000"))
         assertEquals(-1, uidFromLogcatToken("system"))
     }
+
+    @Test
+    fun namesNumericPlatformUids() {
+        assertEquals("root", platformUidName(0))
+        assertEquals("system", platformUidName(1000))
+        assertEquals("system", platformUidName(1001000))
+        assertEquals("uid:1999", platformUidName(1999))
+    }
+
+    @Test
+    fun namesIsolatedUids() {
+        assertEquals("isolated:99085", isolatedUidName(99085))
+        assertEquals("isolated:90100", isolatedUidName(90100))
+        assertNull(isolatedUidName(10123))
+    }
 }
