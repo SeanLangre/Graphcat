@@ -13,14 +13,18 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Make the Loki URL in `Go/server/main.go` configurable via `LOKI_URL` env var (defaults to `http://localhost:3100`)
 - [x] Grafana → Loki data source (provisioning or manual), basic dashboards/queries
 - [x] Search/filtering in Grafana (by `device_id`, `priority`, `tag`, message content)
+- [x] Resolve logcat UIDs to package names on-device (`AppResolver`, incl. platform/isolated UIDs) and send as `package`
+- [x] Parse `logcat -v long` and include TID in `LogEvent`
+- [x] Loki `level` label (Grafana-recognized level names) and `app` label; log line mirrors `adb logcat` format
+- [x] Loki and Grafana share the `logstream` Docker network (data source added manually at `http://logstream-loki:3100`)
 
 ## Dashboard UX (next phase)
 
 Core pipeline (Android → Go → Loki → Grafana) works end-to-end, so the next priority is making the live dashboard (`index.html`) pleasant to use, before reconnect/backpressure/auth. Architectural decision: keep Grafana for historical/search analysis, and make `index.html` the polished live/operator UI — Grafana and the LogStream dashboard stay complementary, not redundant.
 
-1. [ ] Improve log display — better timestamp formatting, show `device_id`/`priority`/`tag`/PID/UID, eventually app/package name, make long messages easier to read
+1. [ ] Improve log display — better timestamp formatting, show `device_id`/`priority`/`tag`/PID/TID/UID, make long messages easier to read (package name is already shown)
 2. [ ] Message search — free-text search inside log messages (e.g. `exception`, `crash`, `Bluetooth`), combinable with filters
-3. [ ] Better filtering — by device, priority, tag, app/package, possibly PID; an easy "clear filters" action
+3. [ ] Better filtering in `index.html` — by device, priority, tag, app/package, possibly PID; an easy "clear filters" action (Grafana can already filter by the `app` label)
 4. [ ] Time controls — last 5/15 min, last hour, today, custom range
 5. [ ] Log-level visualization — errors clearly visible, warnings distinguishable, debug/info less dominant; fix the confusing `UNK` priority presentation
 6. [ ] Live-tail experience — explicit Live toggle, auto-follow newest logs, pause while inspecting an old entry, "jump to latest" button
@@ -53,6 +57,7 @@ Core pipeline (Android → Go → Loki → Grafana) works end-to-end, so the nex
 3. [ ] Authentication (device stream + dashboard/Grafana access)
 4. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
 5. [ ] Production deployment
+6. [ ] Optional: provision the Grafana Loki data source from files instead of manual setup
 
 ## Notes
 

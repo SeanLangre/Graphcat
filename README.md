@@ -8,7 +8,7 @@ Stream an Android device's `logcat` output in real time to a browser dashboard o
 - **Server** (`Go/server/`) — a Go WebSocket hub that receives log events from device(s), broadcasts them to connected dashboards, and pushes them to Loki for persistent storage. Also serves the dashboard's `index.html`.
 - **Test client** (`Go/testclient/`) — a standalone Go program that simulates a device by sending one fake log event per second, useful for testing the server/dashboard without a real phone.
 - **Loki** (`infrastructure/loki/`) — a local Loki instance (via Docker Compose) that the server pushes every `LogEvent` to, for historical/searchable log storage alongside the live dashboard.
-- **Grafana** (`infrastructure/grafana/`) — a local Grafana instance (via Docker Compose) for querying Loki; the Loki data source isn't provisioned yet, see [TODO.md](TODO.md).
+- **Grafana** (`infrastructure/grafana/`) — a local Grafana instance (via Docker Compose) for querying and searching the logs stored in Loki.
 
 ```
 Android device --(WebSocket: /v1/device/stream)--> Go server --(WebSocket: /v1/dashboard/stream)--> Browser dashboard
@@ -47,7 +47,7 @@ cd infrastructure/loki
 docker compose up -d
 ```
 
-This starts Loki on `:3100` using `loki-config.yaml` (filesystem storage under `infrastructure/loki/data`).
+This starts Loki on `:3100` using `loki-config.yaml` (filesystem storage under `infrastructure/loki/data`). It also creates the `logstream` Docker network that Grafana joins, so start Loki first.
 
 ## Running Grafana
 
@@ -56,7 +56,7 @@ cd infrastructure/grafana
 docker compose up -d
 ```
 
-This starts Grafana on `:3000` (data under `infrastructure/grafana/data`). The Loki data source isn't provisioned automatically yet — add it manually (`http://host.docker.internal:3100` or the Loki container's address) or see [TODO.md](TODO.md) for provisioning it.
+This starts Grafana on `:3000` (data under `infrastructure/grafana/data`) on the external `logstream` network, so Loki must already be running. The Loki data source is added manually in Grafana (**Connections → Data sources → Loki**) with URL `http://logstream-loki:3100`; it's stored in `grafana.db` under `data/`, so it persists across restarts but isn't provisioned from files.
 
 ## Running the Android app
 
@@ -91,7 +91,7 @@ Now open LogStream and press **Start Streaming**.
 
 ## Planned architecture
 
-The server now fans each event both to connected dashboards and to Loki as a persistent, searchable log store. Grafana runs alongside Loki as the operator UI, but the Loki data source and dashboards still need to be wired up:
+The server fans each event both to connected dashboards and to Loki as a persistent, searchable log store, with Grafana on top of Loki for historical search:
 
 ```
                          ┌─────────────────────────────┐
@@ -143,11 +143,11 @@ The server now fans each event both to connected dashboards and to Loki as a per
                    └───────────┘
 ```
 
-- **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Parsed lines become structured `LogEvent` JSON and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
+- **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Each entry's UID is resolved to a package name by `AppResolver` (installed apps via `QUERY_ALL_PACKAGES`, plus platform and isolated UIDs). Parsed entries become structured `LogEvent` JSON (`device_id`, `seq`, `timestamp`, `priority`, `tag`, `pid`, `tid`, `uid`, `package`, `message`) and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
 - **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard doesn't depend on Loki/Grafana being up.
-- **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Currently `device_id`, `priority`, and `tag` become labels (e.g. `{device_id="android-01", priority="E"}`), with the message stored as log content.
-- **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), for historical queries, time-range filtering, log tailing, and dashboards across one or many devices. The Loki data source and dashboards still need to be configured — see [TODO.md](TODO.md).
+- **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Each event is stored with the labels `job="logstream"`, `device_id`, `priority`, `level` (Android priority mapped to Grafana's level names: V→trace, D→debug, I→info, W→warn, E→error, F→critical), `tag`, and `app` (package name, or `unknown`), e.g. `{device_id="android-01", level="error", app="com.android.systemui"}`. The log line mirrors `adb logcat`: `[app] P/Tag(pid-tid): message`.
+- **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), for historical queries, time-range filtering, log tailing, and dashboards across one or many devices, using the Loki data source (added manually, see [Running Grafana](#running-grafana)).
 - **Two views**: a live view (`Go → Browser`) for immediate monitoring, and a historical/search view (`Go → Loki → Grafana`) for investigation.
 - **Multiple devices** — the architecture already supports this: additional Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.
 
-See [TODO.md](TODO.md) for the remaining work to get there.
+See [TODO.md](TODO.md) for remaining work.
