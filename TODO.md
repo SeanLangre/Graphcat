@@ -28,6 +28,31 @@ Core pipeline (Android → Go → Loki → Grafana) works end-to-end. Architectu
 4. [x] Alert on error spikes — fires when an app logs >50 errors in 5 min for 2 min (LogStream folder)
    - [ ] Configure a contact point (only the default email one exists, and SMTP isn't set up, so alerts are visible in Grafana but not delivered)
 
+## Known issues
+
+Things that are wrong or don't work yet in the current code. Several overlap with "Next up" below; this list records the concrete failure, "Next up" the planned work.
+
+### Go server
+
+- [ ] **Loki push blocks ingestion.** `deviceHandler` calls `loki.Push` synchronously, one HTTP request per log line, before reading the next message. A busy device (hundreds of lines/s) outpaces it, and the backpressure reaches the phone: OkHttp queue → 500-slot `logChannel` → `LogcatCollector` stops reading → logcat drops lines. If Loki is down, each line waits the full 5 s client timeout, so the live dashboard stalls too, despite the README's claim that it doesn't depend on Loki. Fix: buffered channel + background goroutine that batches pushes (group by stream, flush every ~100 lines / ~500 ms, drop when full).
+- [ ] **Loki label cardinality.** `tag` is a stream label, and Android has thousands of distinct tags; `app` also grows unbounded via `isolated:<uid>` names, and `priority` duplicates `level`. This creates many tiny streams, which Loki handles poorly. Move `tag` (and anything per-process) to structured metadata or the log line, and drop `priority`. The dashboard's `tag` variable (`label_values(..., tag)`) and `tag=~"$tag"` filter must change with it.
+- [ ] **Slow dashboard stalls devices.** `Hub.broadcast` writes to each dashboard serially under the read lock with a 2 s timeout per client, inside the device read loop. Clients whose writes fail are logged but never removed.
+- [ ] **Per-event server logging.** Every event is `log.Printf`'d, flooding stdout under real volume.
+- [ ] **`index.html` served by relative path.** `http.ServeFile(w, r, "index.html")` only works when started from `Go/server`; use `//go:embed`. The `/` handler also serves it for every unknown path.
+
+### Android
+
+- [ ] **Hardcoded `device_id`.** `LogStreamClient` always sends `"android-01"`, so multiple devices merge into one stream (the README's multi-device claim is not true yet). Use `Settings.Secure.ANDROID_ID` or a configurable name.
+- [ ] **No reconnect.** After a WebSocket failure the status goes to "Connection failed" and nothing retries; the user must stop and start again.
+- [ ] **Collector keeps running while disconnected.** On failure only the sender is stopped; the collector fills `logChannel` (500), then blocks. A reconnect first sends that stale burst.
+- [ ] **Unsynchronized socket state.** `webSocket` is written from OkHttp callback threads and read from the sender coroutine and main thread without `@Volatile`/locking.
+- [ ] **`seq` resets** to 0 whenever the collector restarts, and the server doesn't use it, so gaps/drops can't be detected.
+
+### Repo / infra
+
+- [ ] `infrastructure/loki/data/chunks/loki_cluster_seed.json` is tracked despite `infrastructure/loki/data/` being in `.gitignore` (committed before the rule) — `git rm --cached` it.
+- [ ] No auth and cleartext `ws://` on all interfaces, carrying the full system log (may include tokens/PII). Only safe on a trusted LAN.
+
 ## Next up
 
 1. [ ] Reliable Android reconnect (WebSocket drop/retry handling in `LogStreamClient`)

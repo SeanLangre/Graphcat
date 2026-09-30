@@ -42,7 +42,7 @@ This connects to `ws://localhost:8080/v1/device/stream` and streams synthetic lo
 
 ## Running Loki
 
-The server pushes every received `LogEvent` to Loki, at the URL from the `LOKI_URL` env var (defaults to `http://localhost:3100` if unset); a push failure is logged but doesn't block the live dashboard broadcast.
+The server pushes every received `LogEvent` to Loki, at the URL from the `LOKI_URL` env var (defaults to `http://localhost:3100` if unset); a push failure is logged and the event is still broadcast to the live dashboard. Note: pushes are currently synchronous, so a slow or unreachable Loki still delays the dashboard (see [Known issues](TODO.md#known-issues)).
 
 ```
 cd infrastructure/loki
@@ -152,10 +152,10 @@ The server fans each event both to connected dashboards and to Loki as a persist
 ```
 
 - **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Each entry's UID is resolved to a package name by `AppResolver` (installed apps via `QUERY_ALL_PACKAGES`, plus platform and isolated UIDs). Parsed entries become structured `LogEvent` JSON (`device_id`, `seq`, `timestamp`, `priority`, `tag`, `pid`, `tid`, `uid`, `package`, `message`) and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
-- **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard doesn't depend on Loki/Grafana being up.
+- **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard keeps receiving events without Loki/Grafana; however, pushes are synchronous and one request per event, so a slow or down Loki currently throttles ingestion (see [Known issues](TODO.md#known-issues)).
 - **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Each event is stored with the labels `job="logstream"`, `device_id`, `priority`, `level` (Android priority mapped to Grafana's level names: V→trace, D→debug, I→info, W→warn, E→error, F→critical), `tag`, and `app` (package name, or `unknown`), e.g. `{device_id="android-01", level="error", app="com.android.systemui"}`. The log line mirrors `adb logcat`: `[app] P/Tag(pid-tid): message`.
 - **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), the main UI: live tailing, search, filtering, time ranges, and dashboards across one or many devices, with the data source, dashboard and alert rule provisioned from files (see [Running Grafana](#running-grafana)).
 - **Two views**: Grafana (`Go → Loki → Grafana`) is the main UI for tailing, searching and investigating; `index.html` (`Go → Browser`) is just a rough raw view to confirm events are flowing, independent of Loki/Grafana.
-- **Multiple devices** — the architecture already supports this: additional Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.
+- **Multiple devices** — the server and Loki labels are designed for this, but the Android app currently hardcodes `device_id = "android-01"`, so this doesn't work yet (see [Known issues](TODO.md#known-issues)). Once fixed, Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.
 
-See [TODO.md](TODO.md) for remaining work.
+See [TODO.md](TODO.md) for remaining work and [known issues](TODO.md#known-issues).
