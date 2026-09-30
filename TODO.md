@@ -6,7 +6,7 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 
 - [x] Android Logcat → `LogcatCollector` → WebSocket → Go server → browser dashboard (live path working end-to-end)
 - [x] `LogStreamService` as a foreground `specialUse` service — streaming continues after leaving the Activity
-- [x] System-wide Logcat access via `adb shell pm grant com.example.logstream android.permission.READ_LOGS`
+- [x] System-wide Logcat access via `adb shell pm grant com.example.graphcat android.permission.READ_LOGS`
 - [x] Run Loki locally (Docker Compose in `infrastructure/loki/`)
 - [x] Go server → Loki ingestion (`LokiClient.Push` in `Go/server/loki.go`, pushed alongside the existing dashboard broadcast in `deviceHandler`)
 - [x] Run Grafana locally (`infrastructure/grafana/docker-compose.yml`, `:3000`)
@@ -16,16 +16,18 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Resolve logcat UIDs to package names on-device (`AppResolver`, incl. platform/isolated UIDs) and send as `package`
 - [x] Parse `logcat -v long` and include TID in `LogEvent`
 - [x] Loki `level` label (Grafana-recognized level names) and `app` label; log line mirrors `adb logcat` format
-- [x] Loki and Grafana share the `logstream` Docker network (data source at `http://logstream-loki:3100`)
+- [x] Loki and Grafana share the `graphcat` Docker network (data source at `http://graphcat-loki:3100`)
+- [x] Collector starts `logcat` with `-T <now>`, so starting streaming no longer replays the whole ring buffer (duplicate lines in Loki)
+- [x] All isolated uids (numeric or `u<user>_i<n>`) map to a single `app="isolated"`; they're sequential, reused, and can't be traced back to their app
 
 ## Grafana UI (next phase)
 
 Core pipeline (Android → Go → Loki → Grafana) works end-to-end. Architectural decision: Grafana is the main UI for live tailing, search, filtering and investigation; `index.html` stays a rough "is it working" view with no filtering or search. So UI work goes into Grafana, not `index.html`.
 
-1. [x] LogStream dashboard — logs panel filtered by `device_id`, `level`, `app`, `tag` (multi-select, All) plus a free-text `search` box (case-insensitive regex line filter)
+1. [x] Graphcat dashboard — logs panel filtered by `device_id`, `level`, `app`, `tag` (multi-select, All) plus a free-text `search` box (case-insensitive regex line filter)
 2. [x] Overview panels — log volume by `level` and top-10 errors by `app`, both following the dashboard filters
-3. [x] Provision from files — `infrastructure/grafana/provisioning/` (data source, dashboard provider, alert rule) and `infrastructure/grafana/dashboards/logstream.json`
-4. [x] Alert on error spikes — fires when an app logs >50 errors in 5 min for 2 min (LogStream folder)
+3. [x] Provision from files — `infrastructure/grafana/provisioning/` (data source, dashboard provider, alert rule) and `infrastructure/grafana/dashboards/graphcat.json`
+4. [x] Alert on error spikes — fires when an app logs >50 errors in 5 min for 2 min (Graphcat folder)
    - [ ] Configure a contact point (only the default email one exists, and SMTP isn't set up, so alerts are visible in Grafana but not delivered)
 
 ## Known issues
@@ -35,7 +37,7 @@ Things that are wrong or don't work yet in the current code. Several overlap wit
 ### Go server
 
 - [ ] **Loki push blocks ingestion.** `deviceHandler` calls `loki.Push` synchronously, one HTTP request per log line, before reading the next message. A busy device (hundreds of lines/s) outpaces it, and the backpressure reaches the phone: OkHttp queue → 500-slot `logChannel` → `LogcatCollector` stops reading → logcat drops lines. If Loki is down, each line waits the full 5 s client timeout, so the live dashboard stalls too, despite the README's claim that it doesn't depend on Loki. Fix: buffered channel + background goroutine that batches pushes (group by stream, flush every ~100 lines / ~500 ms, drop when full).
-- [ ] **Loki label cardinality.** `tag` is a stream label, and Android has thousands of distinct tags; `app` also grows unbounded via `isolated:<uid>` names, and `priority` duplicates `level`. This creates many tiny streams, which Loki handles poorly. Move `tag` (and anything per-process) to structured metadata or the log line, and drop `priority`. The dashboard's `tag` variable (`label_values(..., tag)`) and `tag=~"$tag"` filter must change with it.
+- [ ] **Loki label cardinality.** `tag` is a stream label, and Android has thousands of distinct tags, and `priority` duplicates `level`. This creates many tiny streams, which Loki handles poorly. Move `tag` (and anything per-process) to structured metadata or the log line, and drop `priority`. The dashboard's `tag` variable (`label_values(..., tag)`) and `tag=~"$tag"` filter must change with it.
 - [ ] **Slow dashboard stalls devices.** `Hub.broadcast` writes to each dashboard serially under the read lock with a 2 s timeout per client, inside the device read loop. Clients whose writes fail are logged but never removed.
 - [ ] **Per-event server logging.** Every event is `log.Printf`'d, flooding stdout under real volume.
 - [ ] **`index.html` served by relative path.** `http.ServeFile(w, r, "index.html")` only works when started from `Go/server`; use `//go:embed`. The `/` handler also serves it for every unknown path.
@@ -48,16 +50,17 @@ Things that are wrong or don't work yet in the current code. Several overlap wit
 - [ ] **Collector keeps running while disconnected.** On failure only the sender is stopped; the collector fills `logChannel` (500), then blocks. A reconnect first sends that stale burst.
 - [ ] **Unsynchronized socket state.** `webSocket` is written from OkHttp callback threads and read from the sender coroutine and main thread without `@Volatile`/locking.
 - [ ] **`seq` resets** to 0 whenever the collector restarts, and the server doesn't use it, so gaps/drops can't be detected.
-- [ ] **Stuck after a sticky restart.** `LogStreamService` returns `START_STICKY`, but when the system restarts it the intent is `null`, so `onStartCommand` matches neither action: the notification stays on "Starting LogStream..." and nothing streams. Treat a `null` intent as start, or use `START_NOT_STICKY`.
-- [ ] **Every collector start replays the whole logcat buffer.** `logcat` runs without `-T`, so each start re-sends the entire ring buffer: duplicate lines in Loki and `index.html`, plus a startup burst that makes the synchronous Loki push worse. Loki only drops exact duplicates while they're still in the ingester. Use `-T 1` (from now) or `-T <last timestamp>`.
+- [ ] **Stuck after a sticky restart.** `LogStreamService` returns `START_STICKY`, but when the system restarts it the intent is `null`, so `onStartCommand` matches neither action: the notification stays on "Starting Graphcat..." and nothing streams. Treat a `null` intent as start, or use `START_NOT_STICKY`.
 - [ ] **Collector never restarts if `logcat` exits.** When `readLine()` returns `null` the coroutine ends but `job` stays non-null, so later `start()` calls return early.
 - [ ] **In-flight event lost on sender cancel.** `stopSender()` cancels the `for (event in logChannel)` loop, dropping an event already taken from the channel but not yet sent.
-- [ ] **No `POST_NOTIFICATIONS`.** With `targetSdk` 35, on Android 13+ the foreground-service notification (and its status text) is hidden unless the permission is declared and granted. Streaming is unaffected and `MainActivity` still shows the status; low priority. Fix: declare it in the manifest and grant it via `adb shell pm grant com.example.logstream android.permission.POST_NOTIFICATIONS`.
+- [ ] **No `POST_NOTIFICATIONS`.** With `targetSdk` 35, on Android 13+ the foreground-service notification (and its status text) is hidden unless the permission is declared and granted. Streaming is unaffected and `MainActivity` still shows the status; low priority. Fix: declare it in the manifest and grant it via `adb shell pm grant com.example.graphcat android.permission.POST_NOTIFICATIONS`.
 
 ### Repo / infra
 
 - [ ] `infrastructure/loki/data/chunks/loki_cluster_seed.json` is tracked despite `infrastructure/loki/data/` being in `.gitignore` (committed before the rule) — `git rm --cached` it.
 - [ ] No auth and cleartext `ws://` on all interfaces, carrying the full system log (may include tokens/PII). Only safe on a trusted LAN.
+- [ ] **No Loki retention.** `loki-config.yaml` has no `limits_config.retention_period` or compactor retention, so `infrastructure/loki/data` grows forever with full system logs. Add a retention period (e.g. 7–14 days) and enable `compactor.retention_enabled`.
+- [ ] Still on the template package `com.example.graphcat` and boilerplate `ExampleUnitTest`/`ExampleInstrumentedTest`. Rename the package and delete the boilerplate before any distribution beyond sideloading.
 - [ ] `Go/server/go.mod` marks `github.com/coder/websocket` as `// indirect` though the server imports it directly — run `go mod tidy`.
 
 ## Next up

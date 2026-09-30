@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import org.junit.Test
 

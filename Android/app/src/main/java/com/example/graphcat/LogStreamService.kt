@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -9,11 +9,11 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.logstream.BuildConfig
+import com.example.graphcat.BuildConfig
 
 private const val TAG = "LogStreamService"
 
-private const val CHANNEL_ID = "logstream_service"
+private const val CHANNEL_ID = "graphcat_service"
 private const val NOTIFICATION_ID = 1001
 
 class LogStreamService : Service() {
@@ -29,7 +29,7 @@ class LogStreamService : Service() {
 
         startForeground(
             NOTIFICATION_ID,
-            createNotification("Starting LogStream...")
+            createNotification("Starting Graphcat...")
         )
 
         client = LogStreamClient(
@@ -94,10 +94,10 @@ class LogStreamService : Service() {
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "LogStream",
+                "Graphcat",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "LogStream background streaming service"
+                description = "Graphcat background streaming service"
             }
 
             val manager =
@@ -115,7 +115,7 @@ class LogStreamService : Service() {
             this,
             CHANNEL_ID
         )
-            .setContentTitle("LogStream")
+            .setContentTitle("Graphcat")
             .setContentText(status)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setOngoing(true)
@@ -149,15 +149,15 @@ class LogStreamService : Service() {
     companion object {
 
         const val ACTION_START =
-            "com.example.logstream.START"
+            "com.example.graphcat.START"
 
         const val ACTION_STOP =
-            "com.example.logstream.STOP"
+            "com.example.graphcat.STOP"
 
         const val ACTION_STATUS =
-            "com.example.logstream.STATUS"
+            "com.example.graphcat.STATUS"
 
         const val EXTRA_STATUS =
-            "com.example.logstream.STATUS_VALUE"
+            "com.example.graphcat.STATUS_VALUE"
     }
 }

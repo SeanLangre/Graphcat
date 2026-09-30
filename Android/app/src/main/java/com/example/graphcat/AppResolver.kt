@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import android.content.pm.PackageManager
 import android.os.Process
@@ -26,9 +26,9 @@ class AppResolver(
                 // Platform uid: the logcat name ("system", "root", ...) is the clearest label
                 if (uidToken.toIntOrNull() == null) uidToken else platformUidName(uid)
             } else {
-                // getNameForUid returns "sharedUserId:uid" for shared uids; drop the suffix
-                packageManager.getNameForUid(uid)?.substringBefore(':')
-                    ?: isolatedUidName(uid)
+                isolatedUidName(uid)
+                    // getNameForUid returns "sharedUserId:uid" for shared uids; drop the suffix
+                    ?: packageManager.getNameForUid(uid)?.substringBefore(':')
                     ?: uidToken
             }
         }
@@ -40,6 +40,9 @@ private const val PER_USER_RANGE = 100_000
 // Isolated processes (renderers, app zygote children) have no package.
 // Covers FIRST_APP_ZYGOTE_ISOLATED_UID (hidden API) to LAST_ISOLATED_UID.
 private val ISOLATED_APP_IDS = 90_000..99_999
+
+// Process.FIRST_ISOLATED_UID is a hidden API.
+private const val FIRST_ISOLATED_UID = 99_000
 
 /**
  * Names for the common fixed platform uids, from AOSP's
@@ -116,23 +119,40 @@ private val PLATFORM_UID_NAMES = mapOf(
 internal fun platformUidName(uid: Int): String =
     PLATFORM_UID_NAMES[uid % PER_USER_RANGE] ?: "uid:$uid"
 
-/** "isolated:<n>" for isolated-process uids, null for anything else. */
+/**
+ * "isolated" for isolated-process uids, null for anything else.
+ * All of them share one name: the uids are handed out sequentially, are
+ * reused, and can't be traced back to the owning app, so per-uid names
+ * would only add Loki streams. The pid still tells processes apart.
+ */
 internal fun isolatedUidName(uid: Int): String? =
-    if (uid % PER_USER_RANGE in ISOLATED_APP_IDS) "isolated:$uid" else null
+    if (uid % PER_USER_RANGE in ISOLATED_APP_IDS) "isolated" else null
 
 private val APP_UID_NAME = Regex("""^u(\d+)_a(\d+)$""")
+private val ISOLATED_UID_NAME = Regex("""^u(\d+)_i(\d+)$""")
 
 /**
  * logcat prints the uid either as a number or as a passwd name.
- * App uids use the fixed scheme "u<user>_a<appId - 10000>"; platform
- * names ("system", "root", ...) return -1 and are shown as-is.
+ * App uids use the fixed scheme "u<user>_a<appId - 10000>" and isolated
+ * uids "u<user>_i<appId - 99000>"; platform names ("system", "root", ...)
+ * return -1 and are shown as-is.
  */
 internal fun uidFromLogcatToken(token: String): Int {
     token.toIntOrNull()?.let { return it }
 
-    val match = APP_UID_NAME.matchEntire(token) ?: return -1
-    val user = match.groupValues[1].toInt()
-    val appId = match.groupValues[2].toInt()
+    APP_UID_NAME.matchEntire(token)?.let { match ->
+        val user = match.groupValues[1].toInt()
+        val appId = match.groupValues[2].toInt()
 
-    return user * PER_USER_RANGE + Process.FIRST_APPLICATION_UID + appId
+        return user * PER_USER_RANGE + Process.FIRST_APPLICATION_UID + appId
+    }
+
+    ISOLATED_UID_NAME.matchEntire(token)?.let { match ->
+        val user = match.groupValues[1].toInt()
+        val appId = match.groupValues[2].toInt()
+
+        return user * PER_USER_RANGE + FIRST_ISOLATED_UID + appId
+    }
+
+    return -1
 }

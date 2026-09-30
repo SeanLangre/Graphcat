@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +20,10 @@ class LogcatCollector(
     fun start(scope: CoroutineScope) {
         if (job != null) return
 
+        // Only stream entries from now on; without -T logcat first replays
+        // its whole ring buffer, duplicating lines already sent to Loki.
+        val since = System.currentTimeMillis()
+
         job = scope.launch(Dispatchers.IO) {
             var process: Process? = null
 
@@ -31,7 +35,9 @@ class LogcatCollector(
                     "-v",
                     "epoch",
                     "-v",
-                    "uid"
+                    "uid",
+                    "-T",
+                    logcatEpochTime(since)
                 )
                     .redirectErrorStream(true)
                     .start()
@@ -93,6 +99,13 @@ class LogcatCollector(
         )
     }
 }
+
+/**
+ * Formats epoch millis as logcat's "sssss.mmm" time for -t/-T.
+ * Built by hand because String.format would use locale-specific digits.
+ */
+internal fun logcatEpochTime(epochMs: Long): String =
+    "${epochMs / 1000}.${(epochMs % 1000).toString().padStart(3, '0')}"
 
 internal data class LogEntry(
     val timestampMs: Long,

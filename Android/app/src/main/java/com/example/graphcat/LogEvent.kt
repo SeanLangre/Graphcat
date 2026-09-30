@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 data class LogEvent(
     val deviceId: String,

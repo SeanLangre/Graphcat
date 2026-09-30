@@ -19,7 +19,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
-        android:theme="@style/Theme.LogStream">
+        android:theme="@style/Theme.Graphcat">
         <service
             android:name=".LogStreamService"
             android:exported="false"
@@ -33,7 +33,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.LogStream"
+            android:theme="@style/Theme.Graphcat"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

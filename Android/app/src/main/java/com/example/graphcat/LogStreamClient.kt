@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -254,7 +254,7 @@ class LogStreamClient(
 
         webSocket?.close(
             1000,
-            "User stopped LogStream"
+            "User stopped Graphcat"
         )
 
         webSocket = null

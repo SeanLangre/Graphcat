@@ -70,7 +70,7 @@ func (l *LokiClient) Push(event LogEvent) error {
 		Streams: []lokiStream{
 			{
 				Stream: map[string]string{
-					"job":       "logstream",
+					"job":       "graphcat",
 					"device_id": event.DeviceID,
 					"priority":  event.Priority,
 					"level":     level,

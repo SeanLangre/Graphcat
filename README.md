@@ -1,8 +1,8 @@
-# LogStream
+# Graphcat
 
 Stream an Android device's `logcat` output in real time over WebSockets to a Go server, which stores it in Loki for searching in Grafana.
 
-![LogStream dashboard in Grafana: filters, log volume by level, errors by app, and the live log list](images/grafana-dashboard.png)
+![Graphcat dashboard in Grafana: filters, log volume by level, errors by app, and the live log list](images/grafana-dashboard.png)
 
 ## How it works
 
@@ -49,7 +49,7 @@ cd infrastructure/loki
 docker compose up -d
 ```
 
-This starts Loki on `:3100` using `loki-config.yaml` (filesystem storage under `infrastructure/loki/data`). It also creates the `logstream` Docker network that Grafana joins, so start Loki first.
+This starts Loki on `:3100` using `loki-config.yaml` (filesystem storage under `infrastructure/loki/data`). It also creates the `graphcat` Docker network that Grafana joins, so start Loki first.
 
 ## Running Grafana
 
@@ -58,13 +58,13 @@ cd infrastructure/grafana
 docker compose up -d
 ```
 
-This starts Grafana on `:3000` (data under `infrastructure/grafana/data`) on the external `logstream` network, so Loki must already be running. Everything it needs is provisioned from files on startup:
+This starts Grafana on `:3000` (data under `infrastructure/grafana/data`) on the external `graphcat` network, so Loki must already be running. Everything it needs is provisioned from files on startup:
 
-- `provisioning/datasources/loki.yaml` — the Loki data source (`http://logstream-loki:3100`)
-- `provisioning/dashboards/logstream.yaml` + `dashboards/logstream.json` — the **LogStream** dashboard: filters for device, level, app and tag, a free-text search box, log volume by level, top errors by app, and the log list
-- `provisioning/alerting/logstream.yaml` — an "Error spike per app" alert rule (>50 errors in 5 min). No contact point is configured, so it only shows up in Grafana's Alerting page.
+- `provisioning/datasources/loki.yaml` — the Loki data source (`http://graphcat-loki:3100`)
+- `provisioning/dashboards/graphcat.yaml` + `dashboards/graphcat.json` — the **Graphcat** dashboard: filters for device, level, app and tag, a free-text search box, log volume by level, top errors by app, and the log list
+- `provisioning/alerting/graphcat.yaml` — an "Error spike per app" alert rule (>50 errors in 5 min). No contact point is configured, so it only shows up in Grafana's Alerting page.
 
-Provisioned items are read-only in the Grafana UI; to change them, edit the files and restart Grafana (`docker compose restart`). To tweak the dashboard visually, edit it in Grafana, then use **Export → JSON** and save it over `dashboards/logstream.json`.
+Provisioned items are read-only in the Grafana UI; to change them, edit the files and restart Grafana (`docker compose restart`). To tweak the dashboard visually, edit it in Grafana, then use **Export → JSON** and save it over `dashboards/graphcat.json`.
 
 ## Running the Android app
 
@@ -82,14 +82,14 @@ Provisioned items are read-only in the Grafana UI; to change them, edit the file
    ```
 4. The app requires `READ_LOGS`; on a non-rooted device this permission must be granted manually. Then run:
    ```
-   adb shell pm grant com.example.logstream android.permission.READ_LOGS
+   adb shell pm grant com.example.graphcat android.permission.READ_LOGS
    ```
 5. Restart the app:
    ```
-   adb shell am force-stop com.example.logstream
+   adb shell am force-stop com.example.graphcat
    ```
 
-Now open LogStream and press **Start Streaming**.
+Now open Graphcat and press **Start Streaming**.
 
 ## Requirements
 
@@ -105,7 +105,7 @@ The server fans each event both to connected dashboards and to Loki as a persist
                          ┌─────────────────────────────┐
                          │       Android Device        │
                          │                             │
-                         │  LogStream App              │
+                         │  Graphcat App               │
                          │      │                      │
                          │      ▼                      │
                          │  Foreground Service         │
@@ -153,7 +153,7 @@ The server fans each event both to connected dashboards and to Loki as a persist
 
 - **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Each entry's UID is resolved to a package name by `AppResolver` (installed apps via `QUERY_ALL_PACKAGES`, plus platform and isolated UIDs). Parsed entries become structured `LogEvent` JSON (`device_id`, `seq`, `timestamp`, `priority`, `tag`, `pid`, `tid`, `uid`, `package`, `message`) and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
 - **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard keeps receiving events without Loki/Grafana; however, pushes are synchronous and one request per event, so a slow or down Loki currently throttles ingestion (see [Known issues](TODO.md#known-issues)).
-- **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Each event is stored with the labels `job="logstream"`, `device_id`, `priority`, `level` (Android priority mapped to Grafana's level names: V→trace, D→debug, I→info, W→warn, E→error, F→critical), `tag`, and `app` (package name, or `unknown`), e.g. `{device_id="android-01", level="error", app="com.android.systemui"}`. The log line mirrors `adb logcat`: `[app] P/Tag(pid-tid): message`.
+- **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Each event is stored with the labels `job="graphcat"`, `device_id`, `priority`, `level` (Android priority mapped to Grafana's level names: V→trace, D→debug, I→info, W→warn, E→error, F→critical), `tag`, and `app` (package name, or `unknown`), e.g. `{device_id="android-01", level="error", app="com.android.systemui"}`. The log line mirrors `adb logcat`: `[app] P/Tag(pid-tid): message`.
 - **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), the main UI: live tailing, search, filtering, time ranges, and dashboards across one or many devices, with the data source, dashboard and alert rule provisioned from files (see [Running Grafana](#running-grafana)).
 - **Two views**: Grafana (`Go → Loki → Grafana`) is the main UI for tailing, searching and investigating; `index.html` (`Go → Browser`) is just a rough raw view to confirm events are flowing, independent of Loki/Grafana.
 - **Multiple devices** — the server and Loki labels are designed for this, but the Android app currently hardcodes `device_id = "android-01"`, so this doesn't work yet (see [Known issues](TODO.md#known-issues)). Once fixed, Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.

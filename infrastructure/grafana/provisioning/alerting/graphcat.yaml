@@ -2,11 +2,11 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: logstream
-    folder: LogStream
+    name: graphcat
+    folder: Graphcat
     interval: 1m
     rules:
-      - uid: logstream-error-spike
+      - uid: graphcat-error-spike
         title: Error spike per app
         condition: C
         data:
@@ -17,7 +17,7 @@ groups:
             datasourceUid: afz08sm46ot8gd
             model:
               refId: A
-              expr: sum by (app, device_id) (count_over_time({job="logstream", level=~"error|critical"}[5m]))
+              expr: sum by (app, device_id) (count_over_time({job="graphcat", level=~"error|critical"}[5m]))
               queryType: instant
           - refId: B
             datasourceUid: __expr__

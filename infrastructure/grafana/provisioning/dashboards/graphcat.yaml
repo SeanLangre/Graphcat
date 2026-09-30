@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: logstream
+  - name: graphcat
     type: file
-    folder: LogStream
+    folder: Graphcat
     allowUiUpdates: false
     options:
       path: /etc/grafana/dashboards

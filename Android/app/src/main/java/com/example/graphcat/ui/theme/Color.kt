@@ -1,4 +1,4 @@
-package com.example.logstream.ui.theme
+package com.example.graphcat.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

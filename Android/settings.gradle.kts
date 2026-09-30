@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LogStream"
+rootProject.name = "Graphcat"
 include(":app")

@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -22,7 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.example.logstream.ui.theme.LogStreamTheme
+import com.example.graphcat.ui.theme.GraphcatTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -68,9 +68,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
 
-            LogStreamTheme {
+            GraphcatTheme {
 
-                LogStreamScreen(
+                GraphcatScreen(
                     status = status,
                     onStart = {
                         startStreaming()
@@ -129,7 +129,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun LogStreamScreen(
+fun GraphcatScreen(
     status: String,
     onStart: () -> Unit,
     onStop: () -> Unit
@@ -146,7 +146,7 @@ fun LogStreamScreen(
     ) {
 
         Text(
-            text = "LogStream",
+            text = "Graphcat",
             style =
                 MaterialTheme.typography.headlineLarge
         )

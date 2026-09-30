@@ -1,4 +1,4 @@
-module logstream
+module graphcat
 
 go 1.27.1
 

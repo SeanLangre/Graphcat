@@ -1,4 +1,4 @@
-package com.example.logstream
+package com.example.graphcat
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -125,6 +125,13 @@ class LogcatParserTest {
     }
 
     @Test
+    fun decodesIsolatedUidNames() {
+        assertEquals(99000, uidFromLogcatToken("u0_i0"))
+        assertEquals(99150, uidFromLogcatToken("u0_i150"))
+        assertEquals(1099005, uidFromLogcatToken("u10_i5"))
+    }
+
+    @Test
     fun namesNumericPlatformUids() {
         assertEquals("root", platformUidName(0))
         assertEquals("system", platformUidName(1000))
@@ -134,8 +141,16 @@ class LogcatParserTest {
 
     @Test
     fun namesIsolatedUids() {
-        assertEquals("isolated:99085", isolatedUidName(99085))
-        assertEquals("isolated:90100", isolatedUidName(90100))
+        assertEquals("isolated", isolatedUidName(99085))
+        assertEquals("isolated", isolatedUidName(90100))
+        assertEquals("isolated", isolatedUidName(uidFromLogcatToken("u0_i0")))
         assertNull(isolatedUidName(10123))
+    }
+
+    @Test
+    fun formatsLogcatEpochTime() {
+        assertEquals("1790602726.972", logcatEpochTime(1790602726972))
+        assertEquals("1790602726.005", logcatEpochTime(1790602726005))
+        assertEquals("1790602726.000", logcatEpochTime(1790602726000))
     }
 }

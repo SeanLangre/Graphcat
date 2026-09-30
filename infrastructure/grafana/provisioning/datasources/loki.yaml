@@ -7,5 +7,5 @@ datasources:
     uid: afz08sm46ot8gd
     type: loki
     access: proxy
-    url: http://logstream-loki:3100
+    url: http://graphcat-loki:3100
     isDefault: true

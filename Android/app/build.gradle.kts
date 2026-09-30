@@ -15,13 +15,13 @@ val serverUrl: String = localProperties.getProperty("SERVER_URL")
     ?: "ws://192.168.1.1:8080/v1/device/stream"
 
 android {
-    namespace = "com.example.logstream"
+    namespace = "com.example.graphcat"
     compileSdk {
         version = release(35)
     }
 
     defaultConfig {
-        applicationId = "com.example.logstream"
+        applicationId = "com.example.graphcat"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
