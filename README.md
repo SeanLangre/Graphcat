@@ -1,11 +1,11 @@
 # LogStream
 
-Stream an Android device's `logcat` output in real time to a browser dashboard over WebSockets.
+Stream an Android device's `logcat` output in real time over WebSockets to a Go server, which stores it in Loki for searching in Grafana.
 
 ## How it works
 
 - **Android app** (`Android/`) — tails `logcat` in a foreground service and pushes each log line to a server as JSON over a WebSocket.
-- **Server** (`Go/server/`) — a Go WebSocket hub that receives log events from device(s), broadcasts them to connected dashboards, and pushes them to Loki for persistent storage. Also serves the dashboard's `index.html`.
+- **Server** (`Go/server/`) — a Go WebSocket hub that receives log events from device(s), broadcasts them to connected dashboards, and pushes them to Loki for persistent storage. Also serves `index.html`, a minimal raw view for checking that events are arriving.
 - **Test client** (`Go/testclient/`) — a standalone Go program that simulates a device by sending one fake log event per second, useful for testing the server/dashboard without a real phone.
 - **Loki** (`infrastructure/loki/`) — a local Loki instance (via Docker Compose) that the server pushes every `LogEvent` to, for historical/searchable log storage alongside the live dashboard.
 - **Grafana** (`infrastructure/grafana/`) — a local Grafana instance (via Docker Compose) for querying and searching the logs stored in Loki.
@@ -27,7 +27,7 @@ The server listens on `:8080`:
 - `GET /` — serves the dashboard (`index.html`)
 - `GET /healthz` — health check
 
-Open `http://localhost:8080` in a browser to view the dashboard.
+Open `http://localhost:8080` in a browser for a raw live view of incoming events — a quick check that the pipeline works. For searching and filtering, use Grafana.
 
 ## Trying it without a phone
 
@@ -146,8 +146,8 @@ The server fans each event both to connected dashboards and to Loki as a persist
 - **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Each entry's UID is resolved to a package name by `AppResolver` (installed apps via `QUERY_ALL_PACKAGES`, plus platform and isolated UIDs). Parsed entries become structured `LogEvent` JSON (`device_id`, `seq`, `timestamp`, `priority`, `tag`, `pid`, `tid`, `uid`, `package`, `message`) and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
 - **Go server** — the ingestion/control layer. Each `LogEvent` received from a device does two things: it's pushed to Loki (`LokiClient.Push` in `Go/server/loki.go`, at the `LOKI_URL` env var, defaulting to `http://localhost:3100`) for historical search, and it's broadcast live to any connected dashboard over `/v1/dashboard/stream`. A Loki push failure is only logged, so the live dashboard doesn't depend on Loki/Grafana being up.
 - **Loki** — the log storage/search backend, runs locally via Docker Compose (`infrastructure/loki/`, `:3100`). Each event is stored with the labels `job="logstream"`, `device_id`, `priority`, `level` (Android priority mapped to Grafana's level names: V→trace, D→debug, I→info, W→warn, E→error, F→critical), `tag`, and `app` (package name, or `unknown`), e.g. `{device_id="android-01", level="error", app="com.android.systemui"}`. The log line mirrors `adb logcat`: `[app] P/Tag(pid-tid): message`.
-- **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), for historical queries, time-range filtering, log tailing, and dashboards across one or many devices, using the Loki data source (added manually, see [Running Grafana](#running-grafana)).
-- **Two views**: a live view (`Go → Browser`) for immediate monitoring, and a historical/search view (`Go → Loki → Grafana`) for investigation.
+- **Grafana** — the operator/search UI (`infrastructure/grafana/`, `:3000`), the main UI: live tailing, search, filtering, time ranges, and dashboards across one or many devices, using the Loki data source (added manually, see [Running Grafana](#running-grafana)).
+- **Two views**: Grafana (`Go → Loki → Grafana`) is the main UI for tailing, searching and investigating; `index.html` (`Go → Browser`) is just a rough raw view to confirm events are flowing, independent of Loki/Grafana.
 - **Multiple devices** — the architecture already supports this: additional Android devices connect to the same `/v1/device/stream` endpoint with distinct `device_id`s, and Loki labels make it possible to query a single device or across all of them.
 
 See [TODO.md](TODO.md) for remaining work.

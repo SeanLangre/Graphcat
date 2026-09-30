@@ -18,37 +18,14 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Loki `level` label (Grafana-recognized level names) and `app` label; log line mirrors `adb logcat` format
 - [x] Loki and Grafana share the `logstream` Docker network (data source added manually at `http://logstream-loki:3100`)
 
-## Dashboard UX (next phase)
+## Grafana UI (next phase)
 
-Core pipeline (Android → Go → Loki → Grafana) works end-to-end, so the next priority is making the live dashboard (`index.html`) pleasant to use, before reconnect/backpressure/auth. Architectural decision: keep Grafana for historical/search analysis, and make `index.html` the polished live/operator UI — Grafana and the LogStream dashboard stay complementary, not redundant.
+Core pipeline (Android → Go → Loki → Grafana) works end-to-end. Architectural decision: Grafana is the main UI for live tailing, search, filtering and investigation; `index.html` stays a rough "is it working" view with no filtering or search. So UI work goes into Grafana, not `index.html`.
 
-1. [ ] Improve log display — better timestamp formatting, show `device_id`/`priority`/`tag`/PID/TID/UID, make long messages easier to read (package name is already shown)
-2. [ ] Message search — free-text search inside log messages (e.g. `exception`, `crash`, `Bluetooth`), combinable with filters
-3. [ ] Better filtering in `index.html` — by device, priority, tag, app/package, possibly PID; an easy "clear filters" action (Grafana can already filter by the `app` label)
-4. [ ] Time controls — last 5/15 min, last hour, today, custom range
-5. [ ] Log-level visualization — errors clearly visible, warnings distinguishable, debug/info less dominant; fix the confusing `UNK` priority presentation
-6. [ ] Live-tail experience — explicit Live toggle, auto-follow newest logs, pause while inspecting an old entry, "jump to latest" button
-7. [ ] Log details — click a log to expand full contents; copy message; copy structured event; show all metadata
-8. [ ] Dashboard layout redesign — header/status bar, filter/search bar, log list (see mockup below); build incrementally rather than a full rewrite
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ LogStream                              🟢 Live              │
-├─────────────────────────────────────────────────────────────┤
-│ Device ▼    Priority ▼    Tag ▼    App ▼    🔍 Search      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│ 12:41:03  E  AndroidRuntime                                 │
-│           FATAL EXCEPTION: main                             │
-│                                                             │
-│ 12:41:04  W  WifiHAL                                       │
-│           connection retry...                               │
-│                                                             │
-│ 12:41:05  I  ActivityManager                               │
-│           START ...                                         │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+1. [ ] LogStream dashboard — logs panel with variables for `device_id`, `level`, `app`, `tag`, plus a free-text search box (line filter)
+2. [ ] Overview panels — log volume / error rate over time by `level` and `app`
+3. [ ] Provision from files — Loki data source and the dashboard JSON under `infrastructure/grafana/`, so a fresh `docker compose up` needs no manual setup
+4. [ ] Optional: alert on error spikes (e.g. rate of `level="error"` per `app`)
 
 ## Next up
 
@@ -57,9 +34,8 @@ Core pipeline (Android → Go → Loki → Grafana) works end-to-end, so the nex
 3. [ ] Authentication (device stream + dashboard/Grafana access)
 4. [ ] Multiple devices (distinct `device_id`s feeding the same Go server; verify Loki label queries across devices)
 5. [ ] Production deployment
-6. [ ] Optional: provision the Grafana Loki data source from files instead of manual setup
 
 ## Notes
 
-- The live browser dashboard (`Go → Browser`) is intentionally kept independent of Loki/Grafana — it should keep working for immediate monitoring even if the historical/search path is down.
+- `index.html` (`Go → Browser`) is only a rough check that events are flowing — it doesn't depend on Loki/Grafana, which also makes it handy for telling Android→Go problems apart from Go→Loki ones. No filtering/search planned there; use Grafana.
 - ADB permission grants are a setup step, not part of the runtime transport; once granted, the device streams independently.
