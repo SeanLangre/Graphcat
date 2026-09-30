@@ -156,7 +156,7 @@
         "x": 0,
         "y": 0,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "targets": [
         {
@@ -181,7 +181,8 @@
             },
             "lineWidth": 1
           },
-          "unit": "short"
+          "unit": "short",
+          "min": 0
         },
         "overrides": [
           {
@@ -286,12 +287,13 @@
           "mode": "multi",
           "sort": "desc"
         }
-      }
+      },
+      "interval": "30s"
     },
     {
       "id": 2,
-      "type": "timeseries",
-      "title": "Errors by app (top 10)",
+      "type": "bargauge",
+      "title": "Errors by app (top 10, selected range)",
       "datasource": {
         "type": "loki",
         "uid": "afz08sm46ot8gd"
@@ -300,7 +302,7 @@
         "x": 12,
         "y": 0,
         "w": 12,
-        "h": 8
+        "h": 9
       },
       "targets": [
         {
@@ -310,34 +312,39 @@
             "uid": "afz08sm46ot8gd"
           },
           "editorMode": "code",
-          "queryType": "range",
-          "expr": "topk(10, sum by (app) (count_over_time({job=\"logstream\", device_id=~\"$device\", level=~\"error|critical\", tag=~\"$tag\", app=~\"$app\"} |~ \"(?i)$search\" [$__auto])))",
+          "queryType": "instant",
+          "expr": "sort_desc(topk(10, sum by (app) (count_over_time({job=\"logstream\", device_id=~\"$device\", level=~\"error|critical\", tag=~\"$tag\", app=~\"$app\"} |~ \"(?i)$search\" [$__range]))))",
           "legendFormat": "{{app}}"
         }
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "stacking": {
-              "mode": "normal"
-            },
-            "lineWidth": 1
-          },
-          "unit": "short"
+          "min": 0,
+          "unit": "short",
+          "decimals": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "valueMode": "color",
+        "showUnfilled": true,
+        "namePlacement": "left",
+        "sizing": "auto",
+        "minVizHeight": 10,
+        "maxVizHeight": 300,
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true,
+          "limit": 10
         }
       }
     },
@@ -351,7 +358,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 9,
         "w": 24,
         "h": 20
       },
@@ -380,5 +387,5 @@
       }
     }
   ],
-  "version": 1
+  "version": 5
 }
