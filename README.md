@@ -101,54 +101,25 @@ Now open Graphcat and press **Start Streaming**.
 
 The server fans each event both to connected dashboards and to Loki as a persistent, searchable log store, with Grafana on top of Loki for historical search:
 
-```
-                         ┌─────────────────────────────┐
-                         │       Android Device        │
-                         │                             │
-                         │  Graphcat App               │
-                         │      │                      │
-                         │      ▼                      │
-                         │  Foreground Service         │
-                         │  (specialUse)               │
-                         │      │                      │
-                         │      ▼                      │
-                         │  Android Logcat             │
-                         │  READ_LOGS granted via ADB  │
-                         │      │                      │
-                         │      ▼                      │
-                         │  LogStreamClient             │
-                         └──────┬──────────────────────┘
-                                │
-                                │ WebSocket
-                                │ /v1/device/stream
-                                ▼
-                    ┌──────────────────────────┐
-                    │        Go Server         │
-                    │                          │
-                    │  Device WebSocket        │
-                    │          │               │
-                    │          ▼               │
-                    │     LogEvent             │
-                    │          │               │
-                    │     ┌────┴─────┐         │
-                    │     │          │         │
-                    │     ▼          ▼         │
-                    │   Loki      Dashboard    │
-                    │     │      WebSocket     │
-                    │     │          │         │
-                    └─────┼──────────┼─────────┘
-                          │          │
-                          ▼          ▼
-                    ┌─────────┐   Browser
-                    │  Loki   │   Dashboard
-                    │  :3100  │
-                    └────┬────┘
-                         │
-                         ▼
-                   ┌───────────┐
-                   │  Grafana  │
-                   │   :3000   │
-                   └───────────┘
+```mermaid
+flowchart TD
+    subgraph device["Android Device"]
+        app["Graphcat App"] --> svc["Foreground Service<br/>(specialUse)"]
+        svc --> logcat["Android Logcat<br/>READ_LOGS granted via ADB"]
+        logcat --> client["LogStreamClient"]
+    end
+
+    client -- "WebSocket<br/>/v1/device/stream" --> ws
+
+    subgraph server["Go Server"]
+        ws["Device WebSocket"] --> event["LogEvent"]
+        event --> push["Loki push"]
+        event --> dash["Dashboard WebSocket"]
+    end
+
+    push --> loki[("Loki<br/>:3100")]
+    dash --> browser["Browser Dashboard"]
+    loki --> grafana["Grafana<br/>:3000"]
 ```
 
 - **Android** — the collector. `LogStreamService` (a foreground `specialUse` service) keeps `logcat -v long` running after the app is backgrounded, using system-wide `READ_LOGS` granted via `adb shell pm grant`. Each entry's UID is resolved to a package name by `AppResolver` (installed apps via `QUERY_ALL_PACKAGES`, plus platform and isolated UIDs). Parsed entries become structured `LogEvent` JSON (`device_id`, `seq`, `timestamp`, `priority`, `tag`, `pid`, `tid`, `uid`, `package`, `message`) and are sent over `/v1/device/stream` — raw logcat text never leaves the device.
