@@ -16,16 +16,17 @@ Roadmap toward the [planned architecture](README.md#planned-architecture): Andro
 - [x] Resolve logcat UIDs to package names on-device (`AppResolver`, incl. platform/isolated UIDs) and send as `package`
 - [x] Parse `logcat -v long` and include TID in `LogEvent`
 - [x] Loki `level` label (Grafana-recognized level names) and `app` label; log line mirrors `adb logcat` format
-- [x] Loki and Grafana share the `logstream` Docker network (data source added manually at `http://logstream-loki:3100`)
+- [x] Loki and Grafana share the `logstream` Docker network (data source at `http://logstream-loki:3100`)
 
 ## Grafana UI (next phase)
 
 Core pipeline (Android → Go → Loki → Grafana) works end-to-end. Architectural decision: Grafana is the main UI for live tailing, search, filtering and investigation; `index.html` stays a rough "is it working" view with no filtering or search. So UI work goes into Grafana, not `index.html`.
 
-1. [ ] LogStream dashboard — logs panel with variables for `device_id`, `level`, `app`, `tag`, plus a free-text search box (line filter)
-2. [ ] Overview panels — log volume / error rate over time by `level` and `app`
-3. [ ] Provision from files — Loki data source and the dashboard JSON under `infrastructure/grafana/`, so a fresh `docker compose up` needs no manual setup
-4. [ ] Optional: alert on error spikes (e.g. rate of `level="error"` per `app`)
+1. [x] LogStream dashboard — logs panel filtered by `device_id`, `level`, `app`, `tag` (multi-select, All) plus a free-text `search` box (case-insensitive regex line filter)
+2. [x] Overview panels — log volume by `level` and top-10 errors by `app`, both following the dashboard filters
+3. [x] Provision from files — `infrastructure/grafana/provisioning/` (data source, dashboard provider, alert rule) and `infrastructure/grafana/dashboards/logstream.json`
+4. [x] Alert on error spikes — fires when an app logs >50 errors in 5 min for 2 min (LogStream folder)
+   - [ ] Configure a contact point (only the default email one exists, and SMTP isn't set up, so alerts are visible in Grafana but not delivered)
 
 ## Next up
 

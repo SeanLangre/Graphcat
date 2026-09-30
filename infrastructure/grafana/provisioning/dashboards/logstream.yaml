@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: logstream
+    type: file
+    folder: LogStream
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
