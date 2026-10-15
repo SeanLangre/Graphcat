@@ -1,2 +1,10 @@
 infrastructure/grafana/data/
 infrastructure/loki/data/
+
+# IDE / OS
+.idea/
+.DS_Store
+
+# Go binaries from `go build`
+Go/server/graphcat
+Go/testclient/testclient

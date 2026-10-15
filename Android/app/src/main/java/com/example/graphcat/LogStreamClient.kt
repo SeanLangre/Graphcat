@@ -16,7 +16,7 @@ import org.json.JSONObject
 private const val TAG = "LogStreamClient"
 
 class LogStreamClient(
-    private val serverUrl: String,
+    val serverUrl: String,
     private val appResolver: AppResolver,
     private val onStatusChanged: (String) -> Unit
 ) {

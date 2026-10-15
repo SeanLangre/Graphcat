@@ -14,12 +14,19 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.graphcat.ui.theme.GraphcatTheme
@@ -27,6 +34,8 @@ import com.example.graphcat.ui.theme.GraphcatTheme
 class MainActivity : ComponentActivity() {
 
     private var status by mutableStateOf("Disconnected")
+
+    private var serverUrl by mutableStateOf("")
 
     private val statusReceiver =
         object : BroadcastReceiver() {
@@ -57,6 +66,8 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
 
+        serverUrl = ServerSettings.load(this)
+
         ContextCompat.registerReceiver(
             this,
             statusReceiver,
@@ -72,6 +83,12 @@ class MainActivity : ComponentActivity() {
 
                 GraphcatScreen(
                     status = status,
+                    serverUrl = serverUrl,
+                    onServerUrlChange = { url ->
+                        ServerSettings.save(this, url)
+
+                        serverUrl = url
+                    },
                     onStart = {
                         startStreaming()
                     },
@@ -128,12 +145,23 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun isActive(status: String): Boolean =
+    status == "Streaming" ||
+        status == "Connected" ||
+        status == "Starting..."
+
 @Composable
 fun GraphcatScreen(
     status: String,
+    serverUrl: String,
+    onServerUrlChange: (String) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit
 ) {
+
+    var showServerDialog by remember {
+        mutableStateOf(false)
+    }
 
     Column(
         modifier = Modifier
@@ -162,16 +190,23 @@ fun GraphcatScreen(
 
         Spacer(
             modifier =
+                Modifier.height(8.dp)
+        )
+
+        Text(
+            text = "Server: ${serverAddress(serverUrl)}",
+            style =
+                MaterialTheme.typography.bodySmall
+        )
+
+        Spacer(
+            modifier =
                 Modifier.height(24.dp)
         )
 
         Button(
             onClick = {
-                if (
-                    status == "Streaming" ||
-                    status == "Connected" ||
-                    status == "Starting..."
-                ) {
+                if (isActive(status)) {
                     onStop()
                 } else {
                     onStart()
@@ -181,16 +216,102 @@ fun GraphcatScreen(
 
             Text(
                 text =
-                    if (
-                        status == "Streaming" ||
-                        status == "Connected" ||
-                        status == "Starting..."
-                    ) {
+                    if (isActive(status)) {
                         "Stop Streaming"
                     } else {
                         "Start Streaming"
                     }
             )
         }
+
+        Spacer(
+            modifier =
+                Modifier.height(8.dp)
+        )
+
+        // The service reads the URL on start, so only allow changes while stopped.
+        OutlinedButton(
+            enabled = !isActive(status),
+            onClick = {
+                showServerDialog = true
+            }
+        ) {
+
+            Text(text = "Change Server")
+        }
     }
+
+    if (showServerDialog) {
+
+        ServerDialog(
+            currentUrl = serverUrl,
+            onDismiss = {
+                showServerDialog = false
+            },
+            onSave = { url ->
+                onServerUrlChange(url)
+
+                showServerDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun ServerDialog(
+    currentUrl: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+
+    var input by remember {
+        mutableStateOf(serverAddress(currentUrl))
+    }
+
+    val normalized = normalizeServerUrl(input)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = "Server")
+        },
+        text = {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                label = {
+                    Text(text = "IP or hostname")
+                },
+                supportingText = {
+                    Text(
+                        text =
+                            "e.g. 100.101.102.103 or my-pc.tailnet.ts.net " +
+                                "(port 8080 unless you add :port)"
+                    )
+                },
+                isError =
+                    input.isNotBlank() && normalized == null,
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Done
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = normalized != null,
+                onClick = {
+                    normalized?.let(onSave)
+                }
+            ) {
+                Text(text = "Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel")
+            }
+        }
+    )
 }

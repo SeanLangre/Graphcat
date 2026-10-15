@@ -16,33 +16,31 @@ Stream an Android device's `logcat` output in real time over WebSockets to a Go 
 Android device --(WebSocket: /v1/device/stream)--> Go server --(WebSocket: /v1/dashboard/stream)--> Browser dashboard
 ```
 
-## Running the server
+## Requirements
 
-```
-cd Go/server
-go run .
-```
+- Docker with Docker Compose (Loki and Grafana)
+- Go 1.27+ (server and test client)
+- Android SDK 35 and a full JDK 25+ — not a JRE, Gradle needs `jlink` (minSdk 26)
+- `adb` and a phone with USB debugging enabled, for the one-time install and permission grant
+- The phone must reach the server's port `8080`: same LAN, or both on the same Tailscale tailnet. The app uses plain `ws://` (`usesCleartextTraffic`), so only do this on a network you trust.
 
-The server listens on `:8080`:
-- `POST/GET /v1/device/stream` — devices connect here and push log events
-- `GET /v1/dashboard/stream` — browsers connect here to receive broadcasts
-- `GET /` — serves the dashboard (`index.html`)
-- `GET /healthz` — health check
+## Quick start
 
-Open `http://localhost:8080` in a browser for a raw live view of incoming events — a quick check that the pipeline works. For searching and filtering, use Grafana.
+Start things in this order — each step depends on the one before it:
 
-## Trying it without a phone
+1. **Loki** — `cd infrastructure/loki && docker compose up -d`
+2. **Grafana** — `cd infrastructure/grafana && docker compose up -d`
+3. **Server** — `cd Go/server && go run .` (leave it running)
+4. **Android app** — first time only: build, install and grant `READ_LOGS` as in [Running the Android app](#running-the-android-app). Then open Graphcat, tap **Change Server** if needed, and press **Start Streaming**.
+5. **Check it** — `http://localhost:8080` shows raw events arriving; Grafana at `http://localhost:3000` → Dashboards → Graphcat → **Graphcat** for search and filtering.
 
-```
-cd Go/testclient
-go run .
-```
+No phone? Replace step 4 with the [test client](#trying-it-without-a-phone).
 
-This connects to `ws://localhost:8080/v1/device/stream` and streams synthetic log events once per second, which will appear on the dashboard.
+To shut down: press **Stop Streaming**, stop the server with Ctrl+C, then `docker compose down` in `infrastructure/grafana` and then `infrastructure/loki`. Logs stay in `infrastructure/loki/data`.
+
+The sections below explain each step in detail.
 
 ## Running Loki
-
-The server pushes every received `LogEvent` to Loki, at the URL from the `LOKI_URL` env var (defaults to `http://localhost:3100` if unset); a push failure is logged and the event is still broadcast to the live dashboard. Note: pushes are currently synchronous, so a slow or unreachable Loki still delays the dashboard (see [Known issues](TODO.md#known-issues)).
 
 ```
 cd infrastructure/loki
@@ -58,15 +56,47 @@ cd infrastructure/grafana
 docker compose up -d
 ```
 
-This starts Grafana on `:3000` (data under `infrastructure/grafana/data`) on the external `graphcat` network, so Loki must already be running. Everything it needs is provisioned from files on startup:
+This starts Grafana on `:3000` (data under `infrastructure/grafana/data`) on the external `graphcat` network, so Loki must already be running. Open `http://localhost:3000` and log in with Grafana's default `admin` / `admin` (it asks you to choose a new password on first login). Everything it needs is provisioned from files on startup:
 
 - `provisioning/datasources/loki.yaml` — the Loki data source (`http://graphcat-loki:3100`)
-- `provisioning/dashboards/graphcat.yaml` + `dashboards/graphcat.json` — the **Graphcat** dashboard: filters for device, level, app and tag, a free-text search box, log volume by level, top errors by app, and the log list
+- `provisioning/dashboards/graphcat.yaml` + `dashboards/graphcat.json` — the **Graphcat** dashboard (in the Graphcat folder): filters for device, level, app and tag, a free-text search box, log volume by level, top errors by app, and the log list
 - `provisioning/alerting/graphcat.yaml` — an "Error spike per app" alert rule (>50 errors in 5 min). No contact point is configured, so it only shows up in Grafana's Alerting page.
 
 Provisioned items are read-only in the Grafana UI; to change them, edit the files and restart Grafana (`docker compose restart`). To tweak the dashboard visually, edit it in Grafana, then use **Export → JSON** and save it over `dashboards/graphcat.json`.
 
+## Running the server
+
+```
+cd Go/server
+go run .
+```
+
+Run it from `Go/server` — it serves `index.html` from the current directory. It pushes every received `LogEvent` to Loki at the `LOKI_URL` env var (defaults to `http://localhost:3100`). A push failure is logged and the event is still broadcast to the live dashboard, but pushes are currently synchronous, so a slow or unreachable Loki delays everything (see [Known issues](TODO.md#known-issues)) — start Loki first.
+
+The server listens on `:8080` on all interfaces, including Tailscale's:
+- `POST/GET /v1/device/stream` — devices connect here and push log events
+- `GET /v1/dashboard/stream` — browsers connect here to receive broadcasts
+- `GET /` — serves the dashboard (`index.html`)
+- `GET /healthz` — health check
+
+Open `http://localhost:8080` in a browser for a raw live view of incoming events — a quick check that the pipeline works. For searching and filtering, use Grafana.
+
+If the phone can't connect, check that a firewall on the server machine allows incoming TCP `8080` (on the LAN interface, or on `tailscale0` for Tailscale). From the phone's browser, `http://<server-ip>:8080/healthz` should return `ok`.
+
+## Trying it without a phone
+
+With the server running:
+
+```
+cd Go/testclient
+go run .
+```
+
+This connects to `ws://localhost:8080/v1/device/stream` and streams synthetic log events once per second, which will appear on the dashboard and in Grafana.
+
 ## Running the Android app
+
+One-time setup:
 
 1. Copy the local properties template and fill in your values:
    ```
@@ -75,27 +105,29 @@ Provisioned items are read-only in the Grafana UI; to change them, edit the file
    ```
 2. Edit `local.properties`:
    - `sdk.dir` — path to your Android SDK
-   - `SERVER_URL` — the server's WebSocket device endpoint, e.g. `ws://192.168.1.100:8080/v1/device/stream` (use your machine's LAN IP, reachable from the device)
-3. Build and install:
+   - `SERVER_URL` — the default server, e.g. `ws://192.168.1.100:8080/v1/device/stream`. Optional: you can also set the server in the app (see below).
+3. Connect the phone with USB debugging enabled, then build and install:
    ```
    ./gradlew installDebug
    ```
-4. The app requires `READ_LOGS`; on a non-rooted device this permission must be granted manually. Then run:
+4. Grant `READ_LOGS` (without it the app only sees its own logs; no root needed):
    ```
    adb shell pm grant com.example.graphcat android.permission.READ_LOGS
    ```
-5. Restart the app:
+5. Restart the app so the permission takes effect:
    ```
    adb shell am force-stop com.example.graphcat
+   adb shell am start -n com.example.graphcat/.MainActivity
    ```
 
-Now open Graphcat and press **Start Streaming**.
+After that the phone doesn't need to be connected to the computer. To stream:
 
-## Requirements
+1. Make sure the server is running.
+2. Open Graphcat. The **Server** line shows where it will connect.
+3. To change it, tap **Change Server** and enter the server machine's IP or hostname — just the address, e.g. `192.168.1.100`; port `8080` and the path are added for you (add `:port` for a different port). For Tailscale, use the server's Tailscale IP (`100.x.y.z`) or MagicDNS name (e.g. `my-pc.tail1234.ts.net`), with Tailscale running on both the phone and the server. The setting is saved on the phone and overrides `SERVER_URL`.
+4. Press **Start Streaming**. The status should go to **Streaming**. **Change Server** is disabled while streaming; stop first to change it.
 
-- Go 1.27+
-- Android SDK 35, minSdk 26
-- A device and server on the same network (the app uses `usesCleartextTraffic` for plain `ws://`)
+If the status shows **Connection failed**, see the firewall note under [Running the server](#running-the-server). It doesn't retry by itself yet, so press **Start Streaming** again once the server is reachable.
 
 ## Planned architecture
 

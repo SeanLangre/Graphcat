@@ -9,7 +9,6 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.graphcat.BuildConfig
 
 private const val TAG = "LogStreamService"
 
@@ -31,18 +30,6 @@ class LogStreamService : Service() {
             NOTIFICATION_ID,
             createNotification("Starting Graphcat...")
         )
-
-        client = LogStreamClient(
-            serverUrl = BuildConfig.SERVER_URL,
-            appResolver = AppResolver(packageManager),
-            onStatusChanged = { status ->
-                Log.d(TAG, "Status: $status")
-
-                updateNotification(status)
-
-                sendStatus(status)
-            }
-        )
     }
 
     override fun onStartCommand(
@@ -56,7 +43,8 @@ class LogStreamService : Service() {
             ACTION_START -> {
                 Log.d(TAG, "Starting stream")
 
-                client?.startStreaming()
+                clientFor(ServerSettings.load(this))
+                    .startStreaming()
             }
 
             ACTION_STOP -> {
@@ -67,6 +55,32 @@ class LogStreamService : Service() {
         }
 
         return START_STICKY
+    }
+
+    // Reuses the client unless the server URL changed since it was created.
+    private fun clientFor(
+        serverUrl: String
+    ): LogStreamClient {
+
+        client?.let {
+            if (it.serverUrl == serverUrl) {
+                return it
+            }
+
+            it.disconnect()
+        }
+
+        return LogStreamClient(
+            serverUrl = serverUrl,
+            appResolver = AppResolver(packageManager),
+            onStatusChanged = { status ->
+                Log.d(TAG, "Status: $status")
+
+                updateNotification(status)
+
+                sendStatus(status)
+            }
+        ).also { client = it }
     }
 
     private fun stopStreaming() {
